@@ -101,6 +101,13 @@ function App() {
         loading={loading}
         onLoadGist={handleLoadGist}
         onAuthClick={() => setAuthModalOpen(true)}
+        currentGist={currentGist}
+        onShare={() => {
+          const gistUrl = currentGist?.html_url || `https://gist.github.com/${currentGist?.owner?.login}/${currentGist?.id}`;
+          navigator.clipboard.writeText(gistUrl).then(() => {
+            addToast('Gist URL copied to clipboard!');
+          });
+        }}
       />
 
       <AuthModal

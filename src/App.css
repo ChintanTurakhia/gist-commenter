@@ -402,6 +402,34 @@ body::before {
     color: var(--text-secondary);
 }
 
+.share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.share-btn:hover {
+    color: var(--accent-blue);
+    border-color: var(--border-glow);
+    background: rgba(88, 166, 255, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(88, 166, 255, 0.2);
+}
+
+.share-btn:active {
+    transform: translateY(0);
+}
+
 .gist-files {
     flex: 1;
     overflow-y: auto;
