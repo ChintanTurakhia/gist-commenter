@@ -1,12 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Logo } from './Logo';
 
-export function Header({ currentUser, onLoadGist, onAuthClick, loading, currentGist, onShare }) {
+const MAX_RECENTS = 5;
+
+function getRecentGists() {
+  try {
+    return JSON.parse(localStorage.getItem('recent-gists') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+export function addRecentGist(gist) {
+  if (!gist?.id) return;
+  const recents = getRecentGists();
+  const exists = recents.findIndex(r => r.id === gist.id);
+  if (exists >= 0) {
+    recents.splice(exists, 1);
+  }
+  recents.unshift({
+    id: gist.id,
+    url: gist.html_url || `https://gist.github.com/${gist.owner?.login}/${gist.id}`,
+    description: gist.description || 'Untitled Gist',
+    owner: gist.owner?.login || 'Unknown'
+  });
+  localStorage.setItem('recent-gists', JSON.stringify(recents.slice(0, MAX_RECENTS)));
+}
+
+export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle }) {
   const [gistUrl, setGistUrl] = useState('');
+  const [showRecents, setShowRecents] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [recents, setRecents] = useState([]);
+  const [avatarError, setAvatarError] = useState(false);
+  const containerRef = useRef(null);
+  const userMenuRef = useRef(null);
+
+  useEffect(() => {
+    setRecents(getRecentGists());
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setShowRecents(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLoadGist = () => {
     if (gistUrl.trim()) {
       onLoadGist(gistUrl.trim());
+      setShowRecents(false);
     }
   };
 
@@ -14,48 +64,140 @@ export function Header({ currentUser, onLoadGist, onAuthClick, loading, currentG
     if (e.key === 'Enter') {
       handleLoadGist();
     }
+    if (e.key === 'Escape') {
+      setShowRecents(false);
+    }
+  };
+
+  const handleRecentClick = (url) => {
+    setGistUrl(url);
+    onLoadGist(url);
+    setShowRecents(false);
+  };
+
+  const handleFocus = () => {
+    setRecents(getRecentGists());
+    setShowRecents(true);
   };
 
   return (
     <header className="header">
       <Logo />
-      <div className="gist-input-container">
-        <input
-          type="text"
-          id="gist-url"
-          placeholder="Paste a GitHub Gist URL..."
-          value={gistUrl}
-          onChange={(e) => setGistUrl(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
+      <div className="gist-input-container" ref={containerRef}>
+        <div className="gist-input-wrapper">
+          <input
+            type="text"
+            id="gist-url"
+            placeholder="Paste a GitHub Gist URL..."
+            value={gistUrl}
+            onChange={(e) => setGistUrl(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
+          />
+          {showRecents && recents.length > 0 && (
+            <div className="recents-dropdown">
+              <div className="recents-header">Recents</div>
+              {recents.map((recent) => (
+                <button
+                  key={recent.id}
+                  className="recent-item"
+                  onClick={() => handleRecentClick(recent.url)}
+                >
+                  <span className="recent-title">{recent.description}</span>
+                  <span className="recent-owner">by {recent.owner}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button id="load-gist" onClick={handleLoadGist} disabled={loading}>
-          {loading ? 'Loading...' : 'Load Gist'}
-        </button>
-      </div>
-      <div className="header-actions">
-        {currentGist && (
-          <button
-            onClick={onShare}
-            className="share-btn"
-            title="Copy gist URL to clipboard"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M13.5 1H9.5C9.22386 1 9 1.22386 9 1.5C9 1.77614 9.22386 2 9.5 2H12.2929L6.14645 8.14645C5.95118 8.34171 5.95118 8.65829 6.14645 8.85355C6.34171 9.04882 6.65829 9.04882 6.85355 8.85355L13 2.70711V5.5C13 5.77614 13.2239 6 13.5 6C13.7761 6 14 5.77614 14 5.5V1.5C14 1.22386 13.7761 1 13.5 1Z" fill="currentColor"/>
-              <path d="M5 3C3.89543 3 3 3.89543 3 5V11C3 12.1046 3.89543 13 5 13H11C12.1046 13 13 12.1046 13 11V8.5C13 8.22386 12.7761 8 12.5 8C12.2239 8 12 8.22386 12 8.5V11C12 11.5523 11.5523 12 11 12H5C4.44772 12 4 11.5523 4 11V5C4 4.44772 4.44772 4 5 4H7.5C7.77614 4 8 3.77614 8 3.5C8 3.22386 7.77614 3 7.5 3H5Z" fill="currentColor"/>
-            </svg>
-            Share
-          </button>
-        )}
-        <button
-          id="auth-btn"
-          className={`auth-btn ${currentUser ? 'authenticated' : ''}`}
-          onClick={onAuthClick}
-        >
-          <span className="auth-icon">🔑</span>
-          <span id="auth-status">
-            {currentUser ? currentUser.login : 'Sign in with GitHub'}
+          <span className="btn-content">
+            {loading && <span className="loading-spinner" />}
+            {loading ? 'Loading' : 'Load Gist'}
           </span>
         </button>
+      </div>
+      <div className="header-actions" ref={userMenuRef}>
+        {currentUser ? (
+          <>
+            <button
+              className="avatar-btn"
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              title={currentUser.login}
+            >
+              {currentUser.avatar_url && !avatarError ? (
+                <img
+                  src={currentUser.avatar_url}
+                  alt={currentUser.login}
+                  className="header-avatar"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <span className="header-avatar-fallback">
+                  {currentUser.login?.charAt(0).toUpperCase()}
+                </span>
+              )}
+            </button>
+            {showUserMenu && (
+              <div className="user-menu">
+                <div className="user-menu-header">
+                  <div className="user-menu-avatar">
+                    {currentUser.avatar_url && !avatarError ? (
+                      <img
+                        src={currentUser.avatar_url}
+                        alt={currentUser.login}
+                        onError={() => setAvatarError(true)}
+                      />
+                    ) : (
+                      <span>{currentUser.login?.charAt(0).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="user-menu-info">
+                    <span className="user-menu-name">{currentUser.login}</span>
+                    <span className="user-menu-status">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4 4a4 4 0 0 1 8 0v2h.25c.966 0 1.75.784 1.75 1.75v5.5A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25v-5.5C2 6.784 2.784 6 3.75 6H4Zm8.25 3.5h-8.5a.25.25 0 0 0-.25.25v5.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-5.5a.25.25 0 0 0-.25-.25ZM10.5 4a2.5 2.5 0 1 0-5 0v2h5Z"/>
+                      </svg>
+                      Authenticated
+                    </span>
+                  </div>
+                </div>
+                <div className="user-menu-divider" />
+                <div className="user-menu-item">
+                  <span>Theme</span>
+                  <button
+                    className="theme-toggle"
+                    onClick={onThemeToggle}
+                  >
+                    <span className={`theme-option ${theme === 'light' ? 'active' : ''}`}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M6 8a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm2-6a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 2Zm0 10a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 12ZM2 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 2 8Zm10 0a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 12 8Zm-1.17-4.24a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 0 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06Zm-6.72 6.72a.75.75 0 0 1 1.06 0l1.06 1.06a.75.75 0 1 1-1.06 1.06l-1.06-1.06a.75.75 0 0 1 0-1.06Zm7.78 0a.75.75 0 0 1 0 1.06l-1.06 1.06a.75.75 0 1 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0ZM5.17 4.82a.75.75 0 0 1 0 1.06L4.11 6.94a.75.75 0 0 1-1.06-1.06l1.06-1.06a.75.75 0 0 1 1.06 0Z"/>
+                      </svg>
+                    </span>
+                    <span className={`theme-option ${theme === 'dark' ? 'active' : ''}`}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M9.598 1.591a.75.75 0 0 1 .785-.175 7 7 0 1 1-8.967 8.967.75.75 0 0 1 .961-.96 5.5 5.5 0 0 0 7.046-7.046.75.75 0 0 1 .175-.786Zm1.616 1.945a7 7 0 0 1-7.678 7.678 5.5 5.5 0 1 0 7.678-7.678Z"/>
+                      </svg>
+                    </span>
+                  </button>
+                </div>
+                <div className="user-menu-divider" />
+                <button className="user-menu-item user-menu-signout" onClick={() => { onSignOut(); setShowUserMenu(false); }}>
+                  Sign out
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <button
+            id="auth-btn"
+            className="auth-btn"
+            onClick={onAuthClick}
+          >
+            <span className="auth-icon">🔑</span>
+            <span id="auth-status">Sign in with GitHub</span>
+          </button>
+        )}
       </div>
     </header>
   );

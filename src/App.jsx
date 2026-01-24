@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Agentation } from 'agentation';
 import { useGistCommenter } from './hooks/useGistCommenter';
 import {
@@ -7,7 +7,8 @@ import {
   GistPanel,
   CommentsPanel,
   CommentModal,
-  ToastContainer
+  ToastContainer,
+  addRecentGist
 } from './components';
 import './App.css';
 
@@ -33,6 +34,28 @@ function App() {
   const [commentModalOpen, setCommentModalOpen] = useState(false);
   const [currentSelection, setCurrentSelection] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const handleThemeToggle = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
+  // Load gist from URL parameter on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gistUrl = params.get('gist');
+    if (gistUrl) {
+      loadGist(gistUrl).catch(() => {
+        // Error is handled by the hook
+      });
+    }
+  }, []);
 
   const addToast = useCallback((message, type = 'success') => {
     const id = Date.now();
@@ -45,7 +68,8 @@ function App() {
 
   const handleLoadGist = async (url) => {
     try {
-      await loadGist(url);
+      const gist = await loadGist(url);
+      addRecentGist(gist);
       addToast('Gist loaded successfully');
     } catch (err) {
       addToast(err.message, 'error');
@@ -101,13 +125,9 @@ function App() {
         loading={loading}
         onLoadGist={handleLoadGist}
         onAuthClick={() => setAuthModalOpen(true)}
-        currentGist={currentGist}
-        onShare={() => {
-          const gistUrl = currentGist?.html_url || `https://gist.github.com/${currentGist?.owner?.login}/${currentGist?.id}`;
-          navigator.clipboard.writeText(gistUrl).then(() => {
-            addToast('Gist URL copied to clipboard!');
-          });
-        }}
+        onSignOut={signOut}
+        theme={theme}
+        onThemeToggle={handleThemeToggle}
       />
 
       <AuthModal
@@ -125,6 +145,13 @@ function App() {
           comments={comments}
           githubToken={githubToken}
           onAddComment={handleAddComment}
+          onShare={() => {
+            const gistUrl = currentGist?.html_url || `https://gist.github.com/${currentGist?.owner?.login}/${currentGist?.id}`;
+            const siteUrl = `${window.location.origin}${window.location.pathname}?gist=${encodeURIComponent(gistUrl)}`;
+            navigator.clipboard.writeText(siteUrl).then(() => {
+              addToast('Share link copied to clipboard!');
+            });
+          }}
         />
 
         <CommentsPanel

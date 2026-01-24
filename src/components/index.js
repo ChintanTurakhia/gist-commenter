@@ -1,4 +1,4 @@
-export { Header } from './Header';
+export { Header, addRecentGist } from './Header';
 export { AuthModal } from './AuthModal';
 export { GistPanel } from './GistPanel';
 export { CommentsPanel } from './CommentsPanel';
