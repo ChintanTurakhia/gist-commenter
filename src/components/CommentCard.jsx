@@ -41,7 +41,19 @@ export function CommentCard({ comment, currentUser, onResolve, onReply, onDelete
   return (
     <div className={`comment-card ${comment.resolved ? 'resolved' : ''}`}>
       {comment.highlightedText && (
-        <div className="comment-highlight-preview">
+        <div
+          className="comment-highlight-preview"
+          onClick={() => {
+            const lineEl = document.querySelector(
+              `[data-filename="${comment.filename}"] [data-line="${comment.lineStart}"]`
+            );
+            if (lineEl) {
+              lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              lineEl.classList.add('flash-highlight');
+              setTimeout(() => lineEl.classList.remove('flash-highlight'), 1500);
+            }
+          }}
+        >
           {comment.filename}:{comment.lineStart}
           {comment.lineEnd !== comment.lineStart && `-${comment.lineEnd}`}
           {' | '}
@@ -52,31 +64,38 @@ export function CommentCard({ comment, currentUser, onResolve, onReply, onDelete
       <div className="comment-header">
         <div className="comment-author">
           <Avatar src={comment.authorAvatar} name={comment.author} />
-          <span className="author-name">{comment.author}</span>
-          <span className="comment-time">{formatTime(comment.timestamp)}</span>
+          <div className="author-info">
+            <span className="author-name">{comment.author}</span>
+            <span className="comment-time">{formatTime(comment.timestamp)}</span>
+          </div>
         </div>
 
-        <div className="comment-actions">
-          {comment.resolved && (
-            <span className="resolved-badge">✓ Resolved</span>
-          )}
-          {currentUser && (
+        {currentUser && (
+          <div className="comment-actions-segmented">
             <button
-              className="comment-action-btn resolve-btn"
-              onClick={() => onResolve(comment.id)}
+              className={`segment-btn ${comment.resolved ? '' : 'active'}`}
+              onClick={() => !comment.resolved || onResolve(comment.id)}
+              disabled={!comment.resolved}
             >
-              {comment.resolved ? 'Reopen' : 'Resolve'}
+              Open
             </button>
-          )}
-          {canModify && (
             <button
-              className="comment-action-btn delete-btn"
-              onClick={() => onDelete(comment.id)}
+              className={`segment-btn ${comment.resolved ? 'active resolved' : ''}`}
+              onClick={() => comment.resolved || onResolve(comment.id)}
+              disabled={comment.resolved}
             >
-              Delete
+              Resolved
             </button>
-          )}
-        </div>
+            {canModify && (
+              <button
+                className="segment-btn delete"
+                onClick={() => onDelete(comment.id)}
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="comment-body">

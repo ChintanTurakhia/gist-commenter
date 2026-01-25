@@ -27,7 +27,7 @@ export function addRecentGist(gist) {
   localStorage.setItem('recent-gists', JSON.stringify(recents.slice(0, MAX_RECENTS)));
 }
 
-export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle }) {
+export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle, onDashboardClick, pendingCount, githubDomain }) {
   const [gistUrl, setGistUrl] = useState('');
   const [showRecents, setShowRecents] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -121,6 +121,19 @@ export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loadin
         {currentUser ? (
           <>
             <button
+              className="dashboard-btn"
+              onClick={onDashboardClick}
+              title="Pending Comments"
+            >
+              <span className="dashboard-icon">📋</span>
+              <span className="dashboard-label">Pending Comments</span>
+              {pendingCount > 0 && (
+                <span className="dashboard-count">
+                  {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
+            </button>
+            <button
               className="avatar-btn"
               onClick={() => setShowUserMenu(!showUserMenu)}
               title={currentUser.login}
@@ -160,6 +173,7 @@ export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loadin
                       </svg>
                       Authenticated
                     </span>
+                    <span className="user-menu-domain">{githubDomain || 'github.com'}</span>
                   </div>
                 </div>
                 <div className="user-menu-divider" />

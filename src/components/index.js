@@ -6,3 +6,5 @@ export { CommentCard } from './CommentCard';
 export { CommentModal } from './CommentModal';
 export { Toast, ToastContainer } from './Toast';
 export { Logo } from './Logo';
+export { PendingCommentsDashboard } from './PendingCommentsDashboard';
+export { DashboardCommentCard } from './DashboardCommentCard';

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Agentation } from 'agentation';
 import { useGistCommenter } from './hooks/useGistCommenter';
+import { usePendingCommentsDashboard } from './hooks/usePendingCommentsDashboard';
 import {
   Header,
   AuthModal,
@@ -8,6 +9,7 @@ import {
   CommentsPanel,
   CommentModal,
   ToastContainer,
+  PendingCommentsDashboard,
   addRecentGist
 } from './components';
 import './App.css';
@@ -32,9 +34,21 @@ function App() {
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [commentModalOpen, setCommentModalOpen] = useState(false);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
   const [currentSelection, setCurrentSelection] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+
+  // Dashboard hook
+  const {
+    dashboardComments,
+    dashboardGists,
+    loading: dashboardLoading,
+    loadingProgress: dashboardLoadingProgress,
+    refresh: refreshDashboard,
+    addTrackedGist,
+    pendingCount
+  } = usePendingCommentsDashboard(githubToken, githubDomain, currentUser);
 
   // Apply theme to document
   useEffect(() => {
@@ -70,10 +84,27 @@ function App() {
     try {
       const gist = await loadGist(url);
       addRecentGist(gist);
+      addTrackedGist(gist); // Track for dashboard
       addToast('Gist loaded successfully');
     } catch (err) {
       addToast(err.message, 'error');
     }
+  };
+
+  const handleNavigateToGist = (gistUrl, commentId) => {
+    setDashboardOpen(false);
+    handleLoadGist(gistUrl).then(() => {
+      // Scroll to comment after loading
+      setTimeout(() => {
+        const commentCard = document.querySelector(`.comment-card[data-comment-id="${commentId}"]`);
+        if (commentCard) {
+          commentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          commentCard.style.animation = 'none';
+          commentCard.offsetHeight;
+          commentCard.style.animation = 'pulse 0.5s ease';
+        }
+      }, 500);
+    });
   };
 
   const handleAddComment = (selection) => {
@@ -128,6 +159,9 @@ function App() {
         onSignOut={signOut}
         theme={theme}
         onThemeToggle={handleThemeToggle}
+        onDashboardClick={() => setDashboardOpen(true)}
+        pendingCount={pendingCount}
+        githubDomain={githubDomain}
       />
 
       <AuthModal
@@ -171,6 +205,17 @@ function App() {
       />
 
       <ToastContainer toasts={toasts} onRemoveToast={removeToast} />
+
+      <PendingCommentsDashboard
+        isOpen={dashboardOpen}
+        onClose={() => setDashboardOpen(false)}
+        comments={dashboardComments}
+        gists={dashboardGists}
+        loading={dashboardLoading}
+        loadingProgress={dashboardLoadingProgress}
+        onRefresh={refreshDashboard}
+        onNavigateToGist={handleNavigateToGist}
+      />
 
       {error && (
         <div style={{ position: 'fixed', bottom: 80, right: 24, color: 'var(--danger)' }}>
