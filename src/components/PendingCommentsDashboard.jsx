@@ -81,12 +81,17 @@ export function PendingCommentsDashboard({
           </div>
           <div className="dashboard-header-actions">
             <button
-              className="dashboard-refresh-btn"
+              className={`dashboard-refresh-btn ${loading ? 'loading' : ''}`}
               onClick={onRefresh}
               disabled={loading}
               title="Refresh"
             >
-              {loading ? '⏳' : '🔄'}
+              <svg className="refresh-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M13.65 2.35A7.958 7.958 0 0 0 8 0a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24l-2.24 2.24h5V1l-1.35 1.35z"
+                  fill="currentColor"
+                />
+              </svg>
             </button>
             <button
               className="dashboard-close-btn"
