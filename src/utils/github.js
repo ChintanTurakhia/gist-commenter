@@ -35,16 +35,26 @@ export function getApiBase(domain) {
   return `https://${domain}/api/v3`;
 }
 
+// Helper to encode Unicode string to base64
+function utoa(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+// Helper to decode base64 to Unicode string
+function atou(b64) {
+  return decodeURIComponent(escape(atob(b64)));
+}
+
 export function encodeCommentMeta(meta) {
   const metaJson = JSON.stringify(meta);
-  return `<!-- GIST_COMMENTER:${btoa(metaJson)} -->\n`;
+  return `<!-- GIST_COMMENTER:${utoa(metaJson)} -->\n`;
 }
 
 export function decodeCommentMeta(body) {
   const match = body.match(/<!-- GIST_COMMENTER:([A-Za-z0-9+/=]+) -->/);
   if (match) {
     try {
-      const meta = JSON.parse(atob(match[1]));
+      const meta = JSON.parse(atou(match[1]));
       const text = body.replace(/<!-- GIST_COMMENTER:[A-Za-z0-9+/=]+ -->\n?/, '');
       return { meta, text };
     } catch (e) {
