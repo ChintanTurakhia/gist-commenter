@@ -27,7 +27,7 @@ export function addRecentGist(gist) {
   localStorage.setItem('recent-gists', JSON.stringify(recents.slice(0, MAX_RECENTS)));
 }
 
-export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle, onDashboardClick, pendingCount, githubDomain }) {
+export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle, onDashboardClick, pendingCount, githubDomain, inputRef }) {
   const [gistUrl, setGistUrl] = useState('');
   const [showRecents, setShowRecents] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -86,6 +86,7 @@ export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loadin
       <div className="gist-input-container" ref={containerRef}>
         <div className="gist-input-wrapper">
           <input
+            ref={inputRef}
             type="text"
             id="gist-url"
             placeholder="Paste a GitHub Gist URL..."

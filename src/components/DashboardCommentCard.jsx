@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { formatTime } from '../utils/github';
+import { parseMarkdown } from '../utils/markdown';
 
 export function DashboardCommentCard({ comment, onNavigateToGist }) {
   const [avatarError, setAvatarError] = useState(false);
@@ -50,7 +51,10 @@ export function DashboardCommentCard({ comment, onNavigateToGist }) {
           </div>
         </div>
         <div className="comment-body">
-          <p className="comment-text">{comment.text}</p>
+          <div
+            className="comment-text markdown-content"
+            dangerouslySetInnerHTML={{ __html: parseMarkdown(comment.text) }}
+          />
         </div>
         {comment.replies.length > 0 && (
           <div className="replies-count">

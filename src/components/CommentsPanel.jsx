@@ -1,7 +1,20 @@
 import { useState } from 'react';
 import { CommentCard } from './CommentCard';
 
-export function CommentsPanel({ comments, currentUser, onResolve, onReply, onDelete }) {
+export function CommentsPanel({
+  comments,
+  currentUser,
+  onResolve,
+  onReply,
+  onDelete,
+  onToggleReaction,
+  isReplyNew,
+  focusedCommentId,
+  focusReplyCommentId,
+  commentsListRef,
+  registerCommentElement,
+  onScrollToLine
+}) {
   const [filter, setFilter] = useState('all');
 
   const filteredComments = comments.filter(comment => {
@@ -37,7 +50,7 @@ export function CommentsPanel({ comments, currentUser, onResolve, onReply, onDel
           </button>
         </div>
       </div>
-      <div className="comments-list">
+      <div className="comments-list" ref={commentsListRef}>
         {sortedComments.length === 0 ? (
           <p className="placeholder-text">
             {comments.length === 0
@@ -53,6 +66,12 @@ export function CommentsPanel({ comments, currentUser, onResolve, onReply, onDel
               onResolve={onResolve}
               onReply={onReply}
               onDelete={onDelete}
+              onToggleReaction={onToggleReaction}
+              isReplyNew={isReplyNew}
+              isFocused={focusedCommentId === comment.id}
+              focusReply={focusReplyCommentId === comment.id}
+              registerElement={registerCommentElement}
+              onScrollToLine={onScrollToLine}
             />
           ))
         )}

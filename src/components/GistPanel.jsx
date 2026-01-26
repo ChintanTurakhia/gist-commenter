@@ -1,14 +1,70 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import { detectLanguage, highlight } from '../utils/syntaxHighlight';
 
-export function GistPanel({ gist, comments, onAddComment, githubToken, onShare }) {
+// Memoized file content component to prevent re-renders from clearing selection
+const FileContent = memo(function FileContent({ filename, content, highlightedRanges }) {
+  const language = detectLanguage(filename);
+  const lines = content.split('\n');
+
+  // Memoize the highlighted HTML to prevent recalculation
+  const highlightedLines = useMemo(() => {
+    const highlightedContent = highlight(content, language);
+    return highlightedContent.split('\n');
+  }, [content, language]);
+
+  return (
+    <table className="code-table">
+      <tbody>
+        {lines.map((line, index) => {
+          const lineNum = index + 1;
+          const isHighlighted = highlightedRanges.some(
+            r => lineNum >= r.lineStart && lineNum <= r.lineEnd
+          );
+          const highlightedLine = highlightedLines[index] || '';
+
+          return (
+            <tr key={lineNum} data-line={lineNum}>
+              <td className="line-number">{lineNum}</td>
+              <td
+                className={`line-content ${isHighlighted ? 'highlighted-text' : ''}`}
+                dangerouslySetInnerHTML={{ __html: highlightedLine || ' ' }}
+              />
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if content or filename changes
+  // or if highlightedRanges actually changed in content
+  if (prevProps.filename !== nextProps.filename) return false;
+  if (prevProps.content !== nextProps.content) return false;
+  if (prevProps.highlightedRanges.length !== nextProps.highlightedRanges.length) return false;
+  // Deep compare ranges
+  for (let i = 0; i < prevProps.highlightedRanges.length; i++) {
+    const prev = prevProps.highlightedRanges[i];
+    const next = nextProps.highlightedRanges[i];
+    if (prev.lineStart !== next.lineStart || prev.lineEnd !== next.lineEnd) return false;
+  }
+  return true;
+});
+
+export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, filesRef: externalFilesRef, onScroll }) {
   const [selectionTooltip, setSelectionTooltip] = useState(null);
-  const filesRef = useRef(null);
+  const internalFilesRef = useRef(null);
+  // Use external ref if provided, otherwise use internal
+  const filesRef = externalFilesRef || internalFilesRef;
 
-  const getHighlightedRanges = useCallback(() => {
-    const ranges = [];
+  // Memoize highlighted ranges grouped by filename to prevent re-renders
+  const highlightedRangesByFile = useMemo(() => {
+    const rangesByFile = {};
     comments.forEach(comment => {
       if (comment.filename && comment.lineStart) {
-        ranges.push({
+        if (!rangesByFile[comment.filename]) {
+          rangesByFile[comment.filename] = [];
+        }
+        rangesByFile[comment.filename].push({
           filename: comment.filename,
           lineStart: comment.lineStart,
           lineEnd: comment.lineEnd || comment.lineStart,
@@ -16,7 +72,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare }
         });
       }
     });
-    return ranges;
+    return rangesByFile;
   }, [comments]);
 
   const handleMouseUp = useCallback((e) => {
@@ -111,32 +167,6 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [selectionTooltip]);
 
-  const renderFileContent = (filename, content) => {
-    const lines = content.split('\n');
-    const highlightedRanges = getHighlightedRanges().filter(r => r.filename === filename);
-
-    return (
-      <table className="code-table">
-        <tbody>
-          {lines.map((line, index) => {
-            const lineNum = index + 1;
-            const isHighlighted = highlightedRanges.some(
-              r => lineNum >= r.lineStart && lineNum <= r.lineEnd
-            );
-
-            return (
-              <tr key={lineNum} data-line={lineNum}>
-                <td className="line-number">{lineNum}</td>
-                <td className={`line-content ${isHighlighted ? 'highlighted-text' : ''}`}>
-                  {line || ' '}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    );
-  };
 
   if (!gist) {
     return (
@@ -194,7 +224,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare }
           )}
         </div>
       </div>
-      <div className="gist-files" ref={filesRef} onMouseUp={handleMouseUp}>
+      <div className="gist-files" ref={filesRef} onMouseUp={handleMouseUp} onScroll={onScroll}>
         {files.map(([filename, file]) => (
           <div key={filename} className="file-block" data-filename={filename}>
             <div className="file-header">
@@ -202,7 +232,11 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare }
               <span>{filename}</span>
             </div>
             <div className="file-content">
-              {renderFileContent(filename, file.content)}
+              <FileContent
+                filename={filename}
+                content={file.content}
+                highlightedRanges={highlightedRangesByFile[filename] || []}
+              />
             </div>
           </div>
         ))}

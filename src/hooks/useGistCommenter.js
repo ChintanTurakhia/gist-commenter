@@ -92,7 +92,8 @@ export function useGistCommenter() {
             authorAvatar: gc.user.avatar_url,
             timestamp: new Date(gc.created_at).getTime(),
             resolved: decoded.meta.resolved || false,
-            replies: decoded.meta.replies || []
+            replies: decoded.meta.replies || [],
+            reactions: decoded.meta.reactions || {}
           };
         } else {
           return {
@@ -107,7 +108,8 @@ export function useGistCommenter() {
             authorAvatar: gc.user.avatar_url,
             timestamp: new Date(gc.created_at).getTime(),
             resolved: false,
-            replies: []
+            replies: [],
+            reactions: {}
           };
         }
       });
@@ -264,6 +266,80 @@ export function useGistCommenter() {
     await loadComments();
   }, [comments, githubToken, currentGist, getGistApiBase, loadComments]);
 
+  const toggleReaction = useCallback(async (commentId, emoji) => {
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment || !comment.githubCommentId || !githubToken || !currentUser) {
+      return;
+    }
+
+    // Get current reactions or initialize empty object
+    const currentReactions = comment.reactions || {};
+    const currentUsers = currentReactions[emoji] || [];
+    const userLogin = currentUser.login;
+
+    // Toggle user in the reaction list
+    let updatedUsers;
+    if (currentUsers.includes(userLogin)) {
+      updatedUsers = currentUsers.filter(u => u !== userLogin);
+    } else {
+      updatedUsers = [...currentUsers, userLogin];
+    }
+
+    // Build updated reactions object
+    const updatedReactions = { ...currentReactions };
+    if (updatedUsers.length > 0) {
+      updatedReactions[emoji] = updatedUsers;
+    } else {
+      delete updatedReactions[emoji];
+    }
+
+    // Update local state immediately for responsive UI
+    setComments(prev => prev.map(c => {
+      if (c.id === commentId) {
+        return { ...c, reactions: updatedReactions };
+      }
+      return c;
+    }));
+
+    // Update on GitHub (store reactions in comment metadata)
+    const meta = {
+      filename: comment.filename,
+      lineStart: comment.lineStart,
+      lineEnd: comment.lineEnd,
+      highlightedText: comment.highlightedText,
+      resolved: comment.resolved,
+      replies: comment.replies,
+      reactions: updatedReactions
+    };
+
+    const body = encodeCommentMeta(meta) + comment.text;
+
+    try {
+      const response = await fetch(
+        `${getGistApiBase()}/gists/${currentGist.id}/comments/${comment.githubCommentId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ body })
+        }
+      );
+
+      if (!response.ok) {
+        // Revert on failure
+        await loadComments();
+        throw new Error('Failed to update reaction');
+      }
+    } catch (error) {
+      // Revert on failure
+      await loadComments();
+      throw error;
+    }
+  }, [comments, githubToken, currentUser, currentGist, getGistApiBase, loadComments]);
+
   const authenticate = useCallback(async (token, domain) => {
     const apiBase = getApiBase(domain);
 
@@ -327,6 +403,7 @@ export function useGistCommenter() {
     resolveComment,
     addReply,
     deleteComment,
+    toggleReaction,
     authenticate,
     signOut
   };

@@ -8,3 +8,6 @@ export { Toast, ToastContainer } from './Toast';
 export { Logo } from './Logo';
 export { PendingCommentsDashboard } from './PendingCommentsDashboard';
 export { DashboardCommentCard } from './DashboardCommentCard';
+export { ReactionPicker } from './ReactionPicker';
+export { ReactionDisplay } from './ReactionDisplay';
+export { KeyboardShortcutsModal } from './KeyboardShortcutsModal';

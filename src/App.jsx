@@ -1,7 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Agentation } from 'agentation';
 import { useGistCommenter } from './hooks/useGistCommenter';
 import { usePendingCommentsDashboard } from './hooks/usePendingCommentsDashboard';
+import { useNotifications } from './hooks/useNotifications';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useSyncScroll } from './hooks/useSyncScroll';
 import {
   Header,
   AuthModal,
@@ -12,6 +15,7 @@ import {
   PendingCommentsDashboard,
   addRecentGist
 } from './components';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import './App.css';
 
 function App() {
@@ -28,6 +32,7 @@ function App() {
     resolveComment,
     addReply,
     deleteComment,
+    toggleReaction,
     authenticate,
     signOut
   } = useGistCommenter();
@@ -35,9 +40,12 @@ function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [commentModalOpen, setCommentModalOpen] = useState(false);
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [currentSelection, setCurrentSelection] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
+  const [focusReplyCommentId, setFocusReplyCommentId] = useState(null);
+  const gistInputRef = useRef(null);
 
   // Dashboard hook
   const {
@@ -49,6 +57,16 @@ function App() {
     addTrackedGist,
     pendingCount
   } = usePendingCommentsDashboard(githubToken, githubDomain, currentUser);
+
+  // Sort comments by timestamp (newest first) to match CommentsPanel display order
+  const sortedComments = useMemo(() => {
+    return [...comments].sort((a, b) => b.timestamp - a.timestamp);
+  }, [comments]);
+
+  // Notifications hook
+  const {
+    isReplyNew
+  } = useNotifications(currentGist?.id, comments);
 
   // Apply theme to document
   useEffect(() => {
@@ -149,6 +167,40 @@ function App() {
     }
   };
 
+  const handleToggleReaction = async (commentId, emoji) => {
+    try {
+      await toggleReaction(commentId, emoji);
+    } catch (err) {
+      addToast(err.message || 'Failed to update reaction', 'error');
+    }
+  };
+
+  // Keyboard shortcuts hook - use sortedComments to match visual order
+  const { focusedCommentId } = useKeyboardShortcuts({
+    comments: sortedComments,
+    onShowHelp: () => setShortcutsModalOpen(true),
+    onFocusInput: () => gistInputRef.current?.focus(),
+    onReply: (commentId) => {
+      setFocusReplyCommentId(commentId);
+      // Reset after a short delay
+      setTimeout(() => setFocusReplyCommentId(null), 100);
+    },
+    onResolve: handleResolve,
+    enabled: !authModalOpen && !commentModalOpen && !dashboardOpen && !shortcutsModalOpen
+  });
+
+  // Synchronized scrolling between gist panel and comments panel
+  const {
+    gistFilesRef,
+    commentsListRef,
+    handleGistScroll,
+    registerCommentElement,
+    scrollGistToLine
+  } = useSyncScroll({
+    comments: sortedComments,
+    focusedCommentId
+  });
+
   return (
     <div className="app-container">
       <Header
@@ -162,6 +214,7 @@ function App() {
         onDashboardClick={() => setDashboardOpen(true)}
         pendingCount={pendingCount}
         githubDomain={githubDomain}
+        inputRef={gistInputRef}
       />
 
       <AuthModal
@@ -186,6 +239,8 @@ function App() {
               addToast('Share link copied to clipboard!');
             });
           }}
+          filesRef={gistFilesRef}
+          onScroll={handleGistScroll}
         />
 
         <CommentsPanel
@@ -194,6 +249,13 @@ function App() {
           onResolve={handleResolve}
           onReply={handleReply}
           onDelete={handleDelete}
+          onToggleReaction={handleToggleReaction}
+          isReplyNew={isReplyNew}
+          focusedCommentId={focusedCommentId}
+          focusReplyCommentId={focusReplyCommentId}
+          commentsListRef={commentsListRef}
+          registerCommentElement={registerCommentElement}
+          onScrollToLine={scrollGistToLine}
         />
       </main>
 
@@ -215,6 +277,11 @@ function App() {
         loadingProgress={dashboardLoadingProgress}
         onRefresh={refreshDashboard}
         onNavigateToGist={handleNavigateToGist}
+      />
+
+      <KeyboardShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
       />
 
       {error && (

@@ -1,3 +1,6 @@
+/* Highlight.js theme import - must be first */
+@import 'highlight.js/styles/github-dark.css';
+
 :root,
 [data-theme="dark"] {
     --bg-primary: #0a0e14;
@@ -50,8 +53,8 @@
 }
 
 html {
-    overflow-x: hidden;
-    overflow-y: scroll;
+    overflow: hidden;
+    height: 100%;
 }
 
 body {
@@ -59,10 +62,16 @@ body {
     background: var(--body-bg);
     background-attachment: fixed;
     color: var(--text-primary);
-    min-height: 100vh;
+    height: 100%;
+    margin: 0;
     position: relative;
-    overflow-x: hidden;
+    overflow: hidden;
     transition: background 0.3s ease;
+}
+
+#root {
+    height: 100%;
+    overflow: hidden;
 }
 
 /* Animated background - dark mode */
@@ -97,9 +106,10 @@ body::before {
 .app-container {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    height: 100%;
     position: relative;
     z-index: 1;
+    overflow: hidden;
 }
 
 /* Header - Liquid Glass Style */
@@ -716,6 +726,8 @@ body::before {
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-glass);
     backdrop-filter: blur(10px);
+    min-height: 108px;
+    box-sizing: border-box;
 }
 
 .gist-header h2 {
@@ -840,6 +852,27 @@ body::before {
     padding: 2px 16px;
     white-space: pre;
     transition: background 0.2s ease;
+}
+
+/* Preserve text selection highlight in code */
+.line-content ::selection,
+.line-content::selection,
+.code-table ::selection,
+.file-content ::selection,
+.hljs ::selection,
+.hljs span::selection {
+    background: rgba(88, 166, 255, 0.4) !important;
+    color: inherit !important;
+}
+
+[data-theme="light"] .line-content ::selection,
+[data-theme="light"] .line-content::selection,
+[data-theme="light"] .code-table ::selection,
+[data-theme="light"] .file-content ::selection,
+[data-theme="light"] .hljs ::selection,
+[data-theme="light"] .hljs span::selection {
+    background: rgba(59, 130, 246, 0.35) !important;
+    color: inherit !important;
 }
 
 .line-content:hover {
@@ -2233,4 +2266,471 @@ tr.flash-highlight .line-number {
 [data-theme="light"] .dashboard-gist-dropdown-menu {
     background: rgba(255, 255, 255, 0.95);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
+   SYNTAX HIGHLIGHTING (highlight.js)
+   ======================================== */
+
+/* Light mode syntax highlighting */
+[data-theme="light"] .hljs {
+    background: transparent !important;
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .hljs-keyword,
+[data-theme="light"] .hljs-selector-tag,
+[data-theme="light"] .hljs-title {
+    color: #d73a49;
+}
+
+[data-theme="light"] .hljs-string,
+[data-theme="light"] .hljs-doctag {
+    color: #032f62;
+}
+
+[data-theme="light"] .hljs-number,
+[data-theme="light"] .hljs-literal {
+    color: #005cc5;
+}
+
+[data-theme="light"] .hljs-comment,
+[data-theme="light"] .hljs-quote {
+    color: #6a737d;
+}
+
+[data-theme="light"] .hljs-function,
+[data-theme="light"] .hljs-params {
+    color: #6f42c1;
+}
+
+[data-theme="light"] .hljs-attr,
+[data-theme="light"] .hljs-attribute {
+    color: #005cc5;
+}
+
+[data-theme="light"] .hljs-variable,
+[data-theme="light"] .hljs-template-variable {
+    color: #e36209;
+}
+
+[data-theme="light"] .hljs-built_in {
+    color: #005cc5;
+}
+
+.hljs {
+    background: transparent !important;
+}
+
+/* ========================================
+   MARKDOWN CONTENT STYLES
+   ======================================== */
+.markdown-content {
+    line-height: 1.6;
+    word-wrap: break-word;
+}
+
+.markdown-content p {
+    margin: 0 0 0.75em 0;
+}
+
+.markdown-content p:last-child {
+    margin-bottom: 0;
+}
+
+.markdown-content strong,
+.markdown-content b {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.markdown-content em,
+.markdown-content i {
+    font-style: italic;
+}
+
+.markdown-content code {
+    background: var(--bg-tertiary);
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.9em;
+    color: var(--accent-blue);
+    border: 1px solid var(--border-color);
+}
+
+.markdown-content pre {
+    background: var(--bg-tertiary);
+    padding: 12px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 12px 0;
+    border: 1px solid var(--border-color);
+}
+
+.markdown-content pre code {
+    background: transparent;
+    padding: 0;
+    border: none;
+    color: var(--text-primary);
+}
+
+.markdown-content a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.markdown-content a:hover {
+    text-decoration: underline;
+    text-shadow: 0 0 8px rgba(88, 166, 255, 0.4);
+}
+
+.markdown-content ul,
+.markdown-content ol {
+    margin: 8px 0;
+    padding-left: 24px;
+}
+
+.markdown-content li {
+    margin: 4px 0;
+}
+
+.markdown-content blockquote {
+    margin: 12px 0;
+    padding: 8px 16px;
+    border-left: 3px solid var(--accent-blue);
+    background: var(--bg-glass);
+    color: var(--text-secondary);
+    border-radius: 0 8px 8px 0;
+}
+
+.markdown-content table {
+    border-collapse: collapse;
+    margin: 12px 0;
+    width: 100%;
+}
+
+.markdown-content th,
+.markdown-content td {
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.markdown-content th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+}
+
+.markdown-content hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 16px 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+    margin: 16px 0 8px 0;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.markdown-content h1 { font-size: 1.5em; }
+.markdown-content h2 { font-size: 1.3em; }
+.markdown-content h3 { font-size: 1.1em; }
+
+/* ========================================
+   COMMENT REACTIONS
+   ======================================== */
+.comment-reactions {
+    padding: 8px 14px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.reaction-display {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.reaction-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: var(--bg-glass);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.reaction-btn:hover:not(:disabled) {
+    background: rgba(88, 166, 255, 0.1);
+    border-color: var(--border-glow);
+    transform: scale(1.05);
+}
+
+.reaction-btn.active {
+    background: rgba(88, 166, 255, 0.15);
+    border-color: var(--accent-blue);
+}
+
+.reaction-btn:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.reaction-emoji {
+    font-size: 14px;
+}
+
+.reaction-count {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.reaction-btn.active .reaction-count {
+    color: var(--accent-blue);
+}
+
+.add-reaction-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 8px;
+    font-size: 13px;
+    border: 1px dashed var(--border-color);
+    border-radius: 16px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+}
+
+.add-reaction-btn:hover {
+    opacity: 1;
+    border-color: var(--border-glow);
+    background: rgba(88, 166, 255, 0.05);
+}
+
+.add-icon {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.reaction-picker-container {
+    position: relative;
+}
+
+.reaction-picker {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    display: flex;
+    gap: 4px;
+    padding: 8px;
+    background: var(--bg-secondary);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    animation: pickerFadeIn 0.15s ease;
+}
+
+@keyframes pickerFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.reaction-picker-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.reaction-picker-btn:hover {
+    background: rgba(88, 166, 255, 0.15);
+    transform: scale(1.2);
+}
+
+/* ========================================
+   NOTIFICATION BADGES
+   ======================================== */
+.new-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+    color: #fff;
+    border-radius: 10px;
+    margin-left: 8px;
+    animation: badgePulse 2s ease-in-out infinite;
+    box-shadow: 0 2px 8px rgba(88, 166, 255, 0.4);
+}
+
+@keyframes badgePulse {
+    0%, 100% {
+        box-shadow: 0 2px 8px rgba(88, 166, 255, 0.4);
+    }
+    50% {
+        box-shadow: 0 2px 16px rgba(88, 166, 255, 0.6);
+    }
+}
+
+.unread-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
+    color: #fff;
+    border-radius: 10px;
+    margin-left: 8px;
+    box-shadow: 0 2px 8px rgba(248, 81, 73, 0.4);
+}
+
+.reply.new {
+    background: rgba(88, 166, 255, 0.05);
+    border-left: 2px solid var(--accent-blue);
+    padding-left: 12px;
+    margin-left: -12px;
+}
+
+/* ========================================
+   KEYBOARD SHORTCUTS
+   ======================================== */
+.comment-card.focused {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    box-shadow: 0 0 20px rgba(88, 166, 255, 0.3);
+}
+
+.keyboard-shortcuts-modal .modal-content {
+    max-width: 450px;
+}
+
+.shortcuts-list {
+    padding: 16px 24px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.shortcut-item:last-child {
+    border-bottom: none;
+}
+
+.shortcut-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 28px;
+    padding: 0 10px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    box-shadow: 0 2px 0 var(--border-color);
+}
+
+.shortcut-description {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.shortcuts-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-glass);
+    text-align: center;
+}
+
+.shortcuts-tip {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.shortcuts-tip kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    margin: 0 2px;
+}
+
+/* Light mode overrides for new features */
+[data-theme="light"] .reaction-picker {
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .markdown-content code {
+    background: rgba(248, 250, 252, 0.8);
+    color: #0969da;
+}
+
+[data-theme="light"] .markdown-content pre {
+    background: rgba(248, 250, 252, 0.9);
+}
+
+[data-theme="light"] .shortcut-key {
+    background: rgba(248, 250, 252, 0.9);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.1);
 }
