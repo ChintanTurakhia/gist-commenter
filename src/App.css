@@ -748,29 +748,109 @@ body::before {
 .share-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 500;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     color: var(--text-secondary);
     background: var(--bg-glass);
     backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border: none;
+    border-radius: 50%;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s ease;
+}
+
+.share-btn svg {
+    width: 14px;
+    height: 14px;
 }
 
 .share-btn:hover {
     color: var(--accent-blue);
-    border-color: var(--border-glow);
-    background: rgba(88, 166, 255, 0.1);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(88, 166, 255, 0.2);
+    background: rgba(88, 166, 255, 0.15);
+    transform: scale(1.1);
+    box-shadow: 0 4px 16px rgba(88, 166, 255, 0.25);
 }
 
 .share-btn:active {
-    transform: translateY(0);
+    transform: scale(0.95);
+}
+
+/* View Mode Toggle */
+.view-mode-toggle {
+    display: flex;
+    position: relative;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 3px;
+    gap: 0;
+}
+
+.toggle-option {
+    position: relative;
+    z-index: 1;
+    padding: 6px 0;
+    width: 70px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: color 0.3s ease;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.toggle-option:hover:not(.active) {
+    color: var(--text-primary);
+}
+
+.toggle-option.active {
+    color: #fff;
+}
+
+.toggle-slider {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    width: 70px;
+    background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+    border-radius: 16px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(88, 166, 255, 0.3);
+}
+
+.toggle-slider.left {
+    transform: translateX(0);
+}
+
+.toggle-slider.right {
+    transform: translateX(70px);
+}
+
+/* File Badge */
+.file-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    background: rgba(163, 113, 247, 0.2);
+    color: var(--accent-purple);
+    border-radius: 10px;
+    margin-left: auto;
+    font-weight: 500;
+}
+
+/* Markdown Preview */
+.markdown-preview {
+    padding: 20px;
+    line-height: 1.7;
+}
+
+.file-content.preview-mode {
+    background: var(--bg-glass);
 }
 
 .gist-files {
@@ -1467,7 +1547,6 @@ tr.flash-highlight .line-number {
 .selection-tooltip:hover {
     background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
     border-color: transparent;
-    transform: translateY(-2px);
     box-shadow: 0 10px 35px rgba(88, 166, 255, 0.35);
 }
 
