@@ -23,9 +23,9 @@ export function AuthModal({ isOpen, onClose, onAuthenticate, onSignOut, currentU
   const getTokenSettingsUrl = () => {
     const domain = getDomain();
     if (domain === 'github.com') {
-      return 'https://github.com/settings/tokens';
+      return 'https://github.com/settings/tokens/new?scopes=gist&description=Gist+Commenter';
     }
-    return `https://${domain}/settings/tokens`;
+    return `https://${domain}/settings/tokens/new?scopes=gist&description=Gist+Commenter`;
   };
 
   const handleSaveToken = async () => {
@@ -121,7 +121,7 @@ export function AuthModal({ isOpen, onClose, onAuthenticate, onSignOut, currentU
               </div>
               <ol>
                 <li>Go to your GitHub instance's <a href={getTokenSettingsUrl()} target="_blank" rel="noopener noreferrer">Token Settings</a></li>
-                <li>Generate a new token with <strong>gist</strong> scope</li>
+                <li>The <strong>gist</strong> scope will be pre-selected — just add a name and generate</li>
                 <li>Copy and paste the token below</li>
               </ol>
             </div>

@@ -333,6 +333,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
               top: selectionTooltip.y,
               transform: 'translateX(-50%)'
             }}
+            onMouseDown={(e) => e.preventDefault()} // Prevent selection change on click
             onClick={handleTooltipClick}
           >
             💬 Add Comment

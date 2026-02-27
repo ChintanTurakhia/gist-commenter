@@ -5,6 +5,7 @@ export function useGistCommenter() {
   const [currentGist, setCurrentGist] = useState(null);
   const [comments, setComments] = useState([]);
   const [githubToken, setGithubToken] = useState(() => localStorage.getItem('github-token') || null);
+  const [githubTokenType, setGithubTokenType] = useState(() => localStorage.getItem('github-token-type') || 'Bearer');
   const [githubDomain, setGithubDomain] = useState(() => localStorage.getItem('github-domain') || 'github.com');
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('github-user');
@@ -31,7 +32,7 @@ export function useGistCommenter() {
       const apiBase = getApiBase(parsed.domain);
       const headers = { 'Accept': 'application/vnd.github.v3+json' };
       if (githubToken && githubDomain === parsed.domain) {
-        headers['Authorization'] = `Bearer ${githubToken}`;
+        headers['Authorization'] = `${githubTokenType} ${githubToken}`;
       }
 
       const response = await fetch(`${apiBase}/gists/${parsed.gistId}`, { headers });
@@ -53,7 +54,7 @@ export function useGistCommenter() {
     } finally {
       setLoading(false);
     }
-  }, [githubToken, githubDomain]);
+  }, [githubToken, githubTokenType, githubDomain]);
 
   const loadComments = useCallback(async () => {
     if (!currentGist || currentGist.id === 'demo') {
@@ -63,14 +64,23 @@ export function useGistCommenter() {
 
     try {
       const apiBase = getGistApiBase();
+      const gistDomain = currentGist.domain || 'github.com';
       const headers = { 'Accept': 'application/vnd.github.v3+json' };
-      if (githubToken) {
-        headers['Authorization'] = `Bearer ${githubToken}`;
+
+      // Only include token if it matches the gist's domain
+      if (githubToken && githubDomain === gistDomain) {
+        headers['Authorization'] = `${githubTokenType} ${githubToken}`;
       }
 
       const response = await fetch(`${apiBase}/gists/${currentGist.id}/comments`, { headers });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          // Comments API requires authentication - return empty array for unauthenticated users
+          console.warn('Comments require authentication. Please sign in to view and add comments.');
+          setComments([]);
+          return;
+        }
         throw new Error('Failed to fetch comments');
       }
 
@@ -119,7 +129,7 @@ export function useGistCommenter() {
       console.error('Error loading comments:', err);
       setError('Failed to load comments');
     }
-  }, [currentGist, githubToken, getGistApiBase]);
+  }, [currentGist, githubToken, githubTokenType, githubDomain, getGistApiBase]);
 
   const createComment = useCallback(async (selectedRange, selectedText, commentText) => {
     if (!githubToken || !currentGist || currentGist.id === 'demo') {
@@ -142,7 +152,7 @@ export function useGistCommenter() {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${githubToken}`,
+          'Authorization': `${githubTokenType} ${githubToken}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
@@ -151,11 +161,14 @@ export function useGistCommenter() {
     );
 
     if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Failed to create comment: gist not found. If the gist exists, your token may be missing the "gist" scope.');
+      }
       throw new Error('Failed to create comment');
     }
 
     await loadComments();
-  }, [githubToken, currentGist, getGistApiBase, loadComments]);
+  }, [githubToken, githubTokenType, currentGist, getGistApiBase, loadComments]);
 
   const resolveComment = useCallback(async (commentId) => {
     const comment = comments.find(c => c.id === commentId);
@@ -180,7 +193,7 @@ export function useGistCommenter() {
       {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${githubToken}`,
+          'Authorization': `${githubTokenType} ${githubToken}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
@@ -195,7 +208,7 @@ export function useGistCommenter() {
     await new Promise(resolve => setTimeout(resolve, 500));
     await loadComments();
     return newResolvedState;
-  }, [comments, githubToken, currentGist, getGistApiBase, loadComments]);
+  }, [comments, githubToken, githubTokenType, currentGist, getGistApiBase, loadComments]);
 
   const addReply = useCallback(async (commentId, replyText) => {
     const comment = comments.find(c => c.id === commentId);
@@ -227,7 +240,7 @@ export function useGistCommenter() {
       {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${githubToken}`,
+          'Authorization': `${githubTokenType} ${githubToken}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
@@ -240,7 +253,7 @@ export function useGistCommenter() {
     }
 
     await loadComments();
-  }, [comments, githubToken, currentUser, currentGist, getGistApiBase, loadComments]);
+  }, [comments, githubToken, githubTokenType, currentUser, currentGist, getGistApiBase, loadComments]);
 
   const deleteComment = useCallback(async (commentId) => {
     const comment = comments.find(c => c.id === commentId);
@@ -253,7 +266,7 @@ export function useGistCommenter() {
       {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${githubToken}`,
+          'Authorization': `${githubTokenType} ${githubToken}`,
           'Accept': 'application/vnd.github.v3+json'
         }
       }
@@ -264,7 +277,7 @@ export function useGistCommenter() {
     }
 
     await loadComments();
-  }, [comments, githubToken, currentGist, getGistApiBase, loadComments]);
+  }, [comments, githubToken, githubTokenType, currentGist, getGistApiBase, loadComments]);
 
   const toggleReaction = useCallback(async (commentId, emoji) => {
     const comment = comments.find(c => c.id === commentId);
@@ -320,7 +333,7 @@ export function useGistCommenter() {
         {
           method: 'PATCH',
           headers: {
-            'Authorization': `Bearer ${githubToken}`,
+            'Authorization': `${githubTokenType} ${githubToken}`,
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json'
           },
@@ -338,10 +351,11 @@ export function useGistCommenter() {
       await loadComments();
       throw error;
     }
-  }, [comments, githubToken, currentUser, currentGist, getGistApiBase, loadComments]);
+  }, [comments, githubToken, githubTokenType, currentUser, currentGist, getGistApiBase, loadComments]);
 
   const authenticate = useCallback(async (token, domain) => {
     const apiBase = getApiBase(domain);
+    let tokenType = 'Bearer';
 
     let response = await fetch(`${apiBase}/user`, {
       headers: {
@@ -351,6 +365,7 @@ export function useGistCommenter() {
     });
 
     if (!response.ok && response.status === 401) {
+      tokenType = 'token';
       response = await fetch(`${apiBase}/user`, {
         headers: {
           'Authorization': `token ${token}`,
@@ -363,11 +378,22 @@ export function useGistCommenter() {
       throw new Error('Invalid token');
     }
 
+    // Check for gist scope on classic PATs
+    const scopes = response.headers.get('X-OAuth-Scopes');
+    if (scopes !== null) {
+      const scopeList = scopes.split(',').map(s => s.trim());
+      if (!scopeList.includes('gist')) {
+        throw new Error('Your token is missing the "gist" scope. Please create a new token with the gist scope enabled.');
+      }
+    }
+
     const user = await response.json();
     setCurrentUser(user);
     setGithubToken(token);
+    setGithubTokenType(tokenType);
     setGithubDomain(domain);
     localStorage.setItem('github-token', token);
+    localStorage.setItem('github-token-type', tokenType);
     localStorage.setItem('github-domain', domain);
     localStorage.setItem('github-user', JSON.stringify(user));
 
@@ -376,9 +402,11 @@ export function useGistCommenter() {
 
   const signOut = useCallback(() => {
     setGithubToken(null);
+    setGithubTokenType('Bearer');
     setCurrentUser(null);
     setGithubDomain('github.com');
     localStorage.removeItem('github-token');
+    localStorage.removeItem('github-token-type');
     localStorage.removeItem('github-domain');
     localStorage.removeItem('github-user');
   }, []);
