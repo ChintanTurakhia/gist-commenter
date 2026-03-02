@@ -1,20 +1,30 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { getApiBase, decodeCommentMeta } from '../utils/github';
 
-export function usePendingCommentsDashboard(githubToken, githubDomain, currentUser) {
+export function usePendingCommentsDashboard(accounts = {}, currentUser) {
   const [dashboardComments, setDashboardComments] = useState([]);
   const [dashboardGists, setDashboardGists] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState(null);
 
-  const fetchUserGists = useCallback(async (page = 1, perPage = 100) => {
-    if (!githubToken) return [];
+  const hasAnyAccount = Object.keys(accounts).length > 0;
 
-    const apiBase = getApiBase(githubDomain);
+  // Get auth headers for a specific domain
+  const getAuthHeaders = useCallback((domain) => {
+    const auth = accounts[domain || 'github.com'];
+    if (!auth) return {};
+    return { 'Authorization': `${auth.tokenType} ${auth.token}` };
+  }, [accounts]);
+
+  const fetchUserGists = useCallback(async (domain, page = 1, perPage = 100) => {
+    const auth = accounts[domain];
+    if (!auth) return [];
+
+    const apiBase = getApiBase(domain);
     const headers = {
       'Accept': 'application/vnd.github.v3+json',
-      'Authorization': `Bearer ${githubToken}`
+      'Authorization': `${auth.tokenType} ${auth.token}`
     };
 
     try {
@@ -27,24 +37,21 @@ export function usePendingCommentsDashboard(githubToken, githubDomain, currentUs
         throw new Error(`Failed to fetch gists: ${response.status}`);
       }
 
-      return await response.json();
+      const gists = await response.json();
+      // Tag each gist with its domain
+      return gists.map(g => ({ ...g, domain }));
     } catch (err) {
-      console.error('Error fetching user gists:', err);
+      console.error(`Error fetching user gists from ${domain}:`, err);
       return [];
     }
-  }, [githubToken, githubDomain]);
+  }, [accounts]);
 
-  const fetchGistComments = useCallback(async (gistId, domain = null) => {
-    const apiBase = domain
-      ? getApiBase(domain)
-      : getApiBase(githubDomain);
-
+  const fetchGistComments = useCallback(async (gistId, domain) => {
+    const apiBase = getApiBase(domain);
     const headers = {
-      'Accept': 'application/vnd.github.v3+json'
+      'Accept': 'application/vnd.github.v3+json',
+      ...getAuthHeaders(domain)
     };
-    if (githubToken) {
-      headers['Authorization'] = `Bearer ${githubToken}`;
-    }
 
     try {
       const response = await fetch(
@@ -53,6 +60,10 @@ export function usePendingCommentsDashboard(githubToken, githubDomain, currentUs
       );
 
       if (!response.ok) {
+        // 401/403/404 are expected for gists the token can't access — skip silently
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          return [];
+        }
         throw new Error(`Failed to fetch comments: ${response.status}`);
       }
 
@@ -61,7 +72,7 @@ export function usePendingCommentsDashboard(githubToken, githubDomain, currentUs
       console.error(`Error fetching comments for gist ${gistId}:`, err);
       return [];
     }
-  }, [githubToken, githubDomain]);
+  }, [getAuthHeaders]);
 
   const fetchMultipleGistComments = useCallback(async (gists, onProgress) => {
     const results = [];
@@ -71,7 +82,8 @@ export function usePendingCommentsDashboard(githubToken, githubDomain, currentUs
     for (let i = 0; i < gists.length; i += concurrencyLimit) {
       const batch = gists.slice(i, i + concurrencyLimit);
       const batchPromises = batch.map(async (gist) => {
-        const comments = await fetchGistComments(gist.id, gist.domain || githubDomain);
+        const domain = gist.domain || 'github.com';
+        const comments = await fetchGistComments(gist.id, domain);
         completed++;
         if (onProgress) {
           onProgress(completed, gists.length);
@@ -84,7 +96,7 @@ export function usePendingCommentsDashboard(githubToken, githubDomain, currentUs
     }
 
     return results;
-  }, [fetchGistComments, githubDomain]);
+  }, [fetchGistComments]);
 
   const getTrackedGists = useCallback(() => {
     try {
@@ -101,33 +113,36 @@ export function usePendingCommentsDashboard(githubToken, githubDomain, currentUs
         id: gist.id,
         description: gist.description,
         owner: gist.owner?.login,
-        domain: gist.domain || githubDomain
+        domain: gist.domain || 'github.com'
       });
       localStorage.setItem('tracked-gists', JSON.stringify(tracked));
     }
-  }, [getTrackedGists, githubDomain]);
+  }, [getTrackedGists]);
 
   const refresh = useCallback(async () => {
-    if (!githubToken) return;
+    if (!hasAnyAccount) return;
 
     setLoading(true);
     setError(null);
     setLoadingProgress({ current: 0, total: 0 });
 
     try {
-      // Fetch user's gists from GitHub API
-      const userGists = await fetchUserGists();
+      // Fetch gists from all authenticated domains in parallel
+      const domains = Object.keys(accounts);
+      const allUserGists = (await Promise.all(
+        domains.map(domain => fetchUserGists(domain))
+      )).flat();
 
       // Merge with locally tracked gists
       const trackedGists = getTrackedGists();
       const allGistsMap = new Map();
 
-      userGists.forEach(gist => {
+      allUserGists.forEach(gist => {
         allGistsMap.set(gist.id, {
           id: gist.id,
           description: gist.description,
           owner: gist.owner?.login,
-          domain: githubDomain,
+          domain: gist.domain || 'github.com',
           files: gist.files
         });
       });
@@ -200,16 +215,16 @@ export function usePendingCommentsDashboard(githubToken, githubDomain, currentUs
     } finally {
       setLoading(false);
     }
-  }, [githubToken, githubDomain, currentUser, fetchUserGists, getTrackedGists, fetchMultipleGistComments]);
+  }, [accounts, hasAnyAccount, currentUser, fetchUserGists, getTrackedGists, fetchMultipleGistComments]);
 
   // Auto-fetch on mount when authenticated
   const hasFetched = useRef(false);
   useEffect(() => {
-    if (githubToken && currentUser && !hasFetched.current) {
+    if (hasAnyAccount && currentUser && !hasFetched.current) {
       hasFetched.current = true;
       refresh();
     }
-  }, [githubToken, currentUser, refresh]);
+  }, [hasAnyAccount, currentUser, refresh]);
 
   return {
     dashboardComments,

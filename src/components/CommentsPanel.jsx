@@ -13,7 +13,9 @@ export function CommentsPanel({
   focusReplyCommentId,
   commentsListRef,
   registerCommentElement,
-  onScrollToLine
+  onScrollToLine,
+  missingAuthDomain,
+  onAuthClick
 }) {
   const [filter, setFilter] = useState('all');
 
@@ -50,6 +52,14 @@ export function CommentsPanel({
           </button>
         </div>
       </div>
+      {missingAuthDomain && (
+        <div className="auth-cta-banner">
+          <p>Sign in to <strong>{missingAuthDomain}</strong> to comment, react, and resolve.</p>
+          <button className="btn-primary btn-sm" onClick={onAuthClick}>
+            Add Token
+          </button>
+        </div>
+      )}
       <div className="comments-list" ref={commentsListRef}>
         {sortedComments.length === 0 ? (
           <p className="placeholder-text">

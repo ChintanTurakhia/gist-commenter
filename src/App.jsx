@@ -22,6 +22,7 @@ function App() {
   const {
     currentGist,
     comments,
+    accounts,
     githubToken,
     githubDomain,
     currentUser,
@@ -56,7 +57,7 @@ function App() {
     refresh: refreshDashboard,
     addTrackedGist,
     pendingCount
-  } = usePendingCommentsDashboard(githubToken, githubDomain, currentUser);
+  } = usePendingCommentsDashboard(accounts, currentUser);
 
   // Sort comments by timestamp (newest first) to match CommentsPanel display order
   const sortedComments = useMemo(() => {
@@ -78,14 +79,22 @@ function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
-  // Load gist from URL parameter on mount
+  // Load gist from URL on mount: supports /{owner}/{gistId} paths and legacy ?gist= param
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const gistUrl = params.get('gist');
-    if (gistUrl) {
-      loadGist(gistUrl).catch(() => {
-        // Error is handled by the hook
-      });
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    if (pathParts.length === 2) {
+      const [owner, gistId] = pathParts;
+      const params = new URLSearchParams(window.location.search);
+      const domain = params.get('domain') || 'github.com';
+      const gistUrl = `https://gist.${domain}/${owner}/${gistId}`;
+      loadGist(gistUrl).catch(() => {});
+    } else {
+      // Legacy query param support
+      const params = new URLSearchParams(window.location.search);
+      const gistUrl = params.get('gist');
+      if (gistUrl) {
+        loadGist(gistUrl).catch(() => {});
+      }
     }
   }, []);
 
@@ -103,6 +112,16 @@ function App() {
       const gist = await loadGist(url);
       addRecentGist(gist);
       addTrackedGist(gist); // Track for dashboard
+
+      // Update URL to clean path format
+      const owner = gist.owner?.login;
+      const gistId = gist.id;
+      if (owner && gistId) {
+        const domain = gist.domain || 'github.com';
+        const pathUrl = `/${owner}/${gistId}${domain !== 'github.com' ? `?domain=${encodeURIComponent(domain)}` : ''}`;
+        window.history.pushState(null, '', pathUrl);
+      }
+
       addToast('Gist loaded successfully');
     } catch (err) {
       addToast(err.message, 'error');
@@ -222,8 +241,7 @@ function App() {
         onClose={() => setAuthModalOpen(false)}
         onAuthenticate={authenticate}
         onSignOut={signOut}
-        currentUser={currentUser}
-        githubDomain={githubDomain}
+        accounts={accounts}
       />
 
       <main className="main-content">
@@ -233,8 +251,11 @@ function App() {
           githubToken={githubToken}
           onAddComment={handleAddComment}
           onShare={() => {
-            const gistUrl = currentGist?.html_url || `https://gist.github.com/${currentGist?.owner?.login}/${currentGist?.id}`;
-            const siteUrl = `${window.location.origin}${window.location.pathname}?gist=${encodeURIComponent(gistUrl)}`;
+            const owner = currentGist?.owner?.login;
+            const gistId = currentGist?.id;
+            const domain = currentGist?.domain || 'github.com';
+            const domainParam = domain !== 'github.com' ? `?domain=${encodeURIComponent(domain)}` : '';
+            const siteUrl = `${window.location.origin}/${owner}/${gistId}${domainParam}`;
             navigator.clipboard.writeText(siteUrl).then(() => {
               addToast('Share link copied to clipboard!');
             });
@@ -256,6 +277,8 @@ function App() {
           commentsListRef={commentsListRef}
           registerCommentElement={registerCommentElement}
           onScrollToLine={scrollGistToLine}
+          missingAuthDomain={currentGist && !githubToken ? (currentGist.domain || 'github.com') : null}
+          onAuthClick={() => setAuthModalOpen(true)}
         />
       </main>
 

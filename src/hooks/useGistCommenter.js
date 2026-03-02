@@ -1,23 +1,85 @@
-import { useState, useEffect, useCallback } from 'react';
-import { parseGistUrl, getApiBase, encodeCommentMeta, decodeCommentMeta } from '../utils/github';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { parseGistUrl, getApiBase, encodeCommentMeta, decodeCommentMeta, EMOJI_TO_CONTENT, CONTENT_TO_EMOJI } from '../utils/github';
+
+const ACCOUNTS_KEY = 'github-accounts';
+
+function loadAccounts() {
+  try {
+    const stored = localStorage.getItem(ACCOUNTS_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+
+  // Migrate from legacy single-token storage
+  const token = localStorage.getItem('github-token');
+  if (token) {
+    const tokenType = localStorage.getItem('github-token-type') || 'Bearer';
+    const domain = localStorage.getItem('github-domain') || 'github.com';
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem('github-user')); } catch {}
+    const accounts = {};
+    if (user) {
+      accounts[domain] = { token, tokenType, user };
+    }
+    // Persist migrated data and clean up legacy keys
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    localStorage.removeItem('github-token');
+    localStorage.removeItem('github-token-type');
+    localStorage.removeItem('github-domain');
+    localStorage.removeItem('github-user');
+    return accounts;
+  }
+
+  return {};
+}
+
+function saveAccounts(accounts) {
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+}
 
 export function useGistCommenter() {
   const [currentGist, setCurrentGist] = useState(null);
   const [comments, setComments] = useState([]);
-  const [githubToken, setGithubToken] = useState(() => localStorage.getItem('github-token') || null);
-  const [githubTokenType, setGithubTokenType] = useState(() => localStorage.getItem('github-token-type') || 'Bearer');
-  const [githubDomain, setGithubDomain] = useState(() => localStorage.getItem('github-domain') || 'github.com');
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('github-user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [accounts, setAccounts] = useState(loadAccounts);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Look up auth credentials for a specific domain
+  const getAuthForDomain = useCallback((domain) => {
+    return accounts[domain || 'github.com'] || null;
+  }, [accounts]);
+
+  // The "active" domain is the current gist's domain
+  const activeDomain = currentGist?.domain || 'github.com';
+
+  // Derived values for components that need them
+  const currentUser = useMemo(() => {
+    const auth = accounts[activeDomain];
+    if (auth) return auth.user;
+    // Fall back to first available account
+    const domains = Object.keys(accounts);
+    return domains.length > 0 ? accounts[domains[0]].user : null;
+  }, [accounts, activeDomain]);
+
+  // Whether the user has a token for the current gist's domain
+  const githubToken = useMemo(() => {
+    const auth = accounts[activeDomain];
+    return auth?.token || null;
+  }, [accounts, activeDomain]);
+
+  // For components that still check domain
+  const githubDomain = activeDomain;
+
   const getGistApiBase = useCallback(() => {
-    const domain = currentGist?.domain || githubDomain || 'github.com';
+    const domain = currentGist?.domain || 'github.com';
     return getApiBase(domain);
-  }, [currentGist, githubDomain]);
+  }, [currentGist]);
+
+  // Build auth headers for a given domain, returns {} if no token available
+  const authHeaders = useCallback((domain) => {
+    const auth = getAuthForDomain(domain);
+    if (!auth) return {};
+    return { 'Authorization': `${auth.tokenType} ${auth.token}` };
+  }, [getAuthForDomain]);
 
   const loadGist = useCallback(async (url) => {
     const parsed = parseGistUrl(url);
@@ -30,10 +92,10 @@ export function useGistCommenter() {
 
     try {
       const apiBase = getApiBase(parsed.domain);
-      const headers = { 'Accept': 'application/vnd.github.v3+json' };
-      if (githubToken && githubDomain === parsed.domain) {
-        headers['Authorization'] = `${githubTokenType} ${githubToken}`;
-      }
+      const headers = {
+        'Accept': 'application/vnd.github.v3+json',
+        ...authHeaders(parsed.domain)
+      };
 
       const response = await fetch(`${apiBase}/gists/${parsed.gistId}`, { headers });
 
@@ -54,7 +116,7 @@ export function useGistCommenter() {
     } finally {
       setLoading(false);
     }
-  }, [githubToken, githubTokenType, githubDomain]);
+  }, [accounts, authHeaders]);
 
   const loadComments = useCallback(async () => {
     if (!currentGist || currentGist.id === 'demo') {
@@ -65,18 +127,15 @@ export function useGistCommenter() {
     try {
       const apiBase = getGistApiBase();
       const gistDomain = currentGist.domain || 'github.com';
-      const headers = { 'Accept': 'application/vnd.github.v3+json' };
-
-      // Only include token if it matches the gist's domain
-      if (githubToken && githubDomain === gistDomain) {
-        headers['Authorization'] = `${githubTokenType} ${githubToken}`;
-      }
+      const headers = {
+        'Accept': 'application/vnd.github+json',
+        ...authHeaders(gistDomain)
+      };
 
       const response = await fetch(`${apiBase}/gists/${currentGist.id}/comments`, { headers });
 
       if (!response.ok) {
         if (response.status === 401) {
-          // Comments API requires authentication - return empty array for unauthenticated users
           console.warn('Comments require authentication. Please sign in to view and add comments.');
           setComments([]);
           return;
@@ -86,7 +145,66 @@ export function useGistCommenter() {
 
       const githubComments = await response.json();
 
+      // Try to fetch detailed reactions (with per-user info) from the native API.
+      // GitHub's gist comment reactions endpoint may block CORS preflight from browsers,
+      // so we fall back to summary counts from the comment response if it fails.
+      const reactionResults = new Map();
+      let detailedReactionsAvailable = false;
+
+      const commentsWithReactions = githubComments.filter(
+        gc => gc.reactions && gc.reactions.total_count > 0
+      );
+
+      if (commentsWithReactions.length > 0) {
+        try {
+          const batchSize = 5;
+          for (let i = 0; i < commentsWithReactions.length; i += batchSize) {
+            const batch = commentsWithReactions.slice(i, i + batchSize);
+            const results = await Promise.all(
+              batch.map(async (gc) => {
+                const res = await fetch(
+                  `${apiBase}/gists/${currentGist.id}/comments/${gc.id}/reactions`,
+                  { headers }
+                );
+                if (res.ok) {
+                  return { commentId: gc.id, reactions: await res.json() };
+                }
+                return { commentId: gc.id, reactions: null };
+              })
+            );
+            for (const r of results) {
+              if (r.reactions !== null) {
+                reactionResults.set(r.commentId, r.reactions);
+                detailedReactionsAvailable = true;
+              }
+            }
+          }
+        } catch {
+          // CORS or network error — fall back to summary counts
+          detailedReactionsAvailable = false;
+        }
+      }
+
       const parsedComments = githubComments.map(gc => {
+        let reactions = {};
+
+        if (detailedReactionsAvailable && reactionResults.has(gc.id)) {
+          for (const r of reactionResults.get(gc.id)) {
+            const emoji = CONTENT_TO_EMOJI[r.content];
+            if (emoji) {
+              if (!reactions[emoji]) reactions[emoji] = [];
+              reactions[emoji].push({ login: r.user.login, reactionId: r.id });
+            }
+          }
+        } else if (gc.reactions && gc.reactions.total_count > 0) {
+          for (const [content, count] of Object.entries(gc.reactions)) {
+            if (typeof count === 'number' && count > 0 && CONTENT_TO_EMOJI[content]) {
+              const emoji = CONTENT_TO_EMOJI[content];
+              reactions[emoji] = Array.from({ length: count }, () => ({ login: '', reactionId: -1 }));
+            }
+          }
+        }
+
         const decoded = decodeCommentMeta(gc.body);
         if (decoded) {
           return {
@@ -103,7 +221,7 @@ export function useGistCommenter() {
             timestamp: new Date(gc.created_at).getTime(),
             resolved: decoded.meta.resolved || false,
             replies: decoded.meta.replies || [],
-            reactions: decoded.meta.reactions || {}
+            reactions
           };
         } else {
           return {
@@ -119,7 +237,7 @@ export function useGistCommenter() {
             timestamp: new Date(gc.created_at).getTime(),
             resolved: false,
             replies: [],
-            reactions: {}
+            reactions
           };
         }
       });
@@ -129,11 +247,13 @@ export function useGistCommenter() {
       console.error('Error loading comments:', err);
       setError('Failed to load comments');
     }
-  }, [currentGist, githubToken, githubTokenType, githubDomain, getGistApiBase]);
+  }, [currentGist, accounts, getGistApiBase, authHeaders]);
 
   const createComment = useCallback(async (selectedRange, selectedText, commentText) => {
-    if (!githubToken || !currentGist || currentGist.id === 'demo') {
-      throw new Error('Cannot create comment');
+    const gistDomain = currentGist?.domain || 'github.com';
+    const auth = getAuthForDomain(gistDomain);
+    if (!auth || !currentGist || currentGist.id === 'demo') {
+      throw new Error(auth ? 'Cannot create comment' : `Not signed in to ${gistDomain}. Add a token for this domain to comment.`);
     }
 
     const meta = {
@@ -152,7 +272,7 @@ export function useGistCommenter() {
       {
         method: 'POST',
         headers: {
-          'Authorization': `${githubTokenType} ${githubToken}`,
+          'Authorization': `${auth.tokenType} ${auth.token}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
@@ -168,11 +288,13 @@ export function useGistCommenter() {
     }
 
     await loadComments();
-  }, [githubToken, githubTokenType, currentGist, getGistApiBase, loadComments]);
+  }, [currentGist, getAuthForDomain, getGistApiBase, loadComments]);
 
   const resolveComment = useCallback(async (commentId) => {
     const comment = comments.find(c => c.id === commentId);
-    if (!comment || !comment.githubCommentId || !githubToken) {
+    const gistDomain = currentGist?.domain || 'github.com';
+    const auth = getAuthForDomain(gistDomain);
+    if (!comment || !comment.githubCommentId || !auth) {
       return;
     }
 
@@ -193,7 +315,7 @@ export function useGistCommenter() {
       {
         method: 'PATCH',
         headers: {
-          'Authorization': `${githubTokenType} ${githubToken}`,
+          'Authorization': `${auth.tokenType} ${auth.token}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
@@ -208,17 +330,20 @@ export function useGistCommenter() {
     await new Promise(resolve => setTimeout(resolve, 500));
     await loadComments();
     return newResolvedState;
-  }, [comments, githubToken, githubTokenType, currentGist, getGistApiBase, loadComments]);
+  }, [comments, currentGist, getAuthForDomain, getGistApiBase, loadComments]);
 
   const addReply = useCallback(async (commentId, replyText) => {
     const comment = comments.find(c => c.id === commentId);
-    if (!comment || !comment.githubCommentId || !githubToken) {
+    const gistDomain = currentGist?.domain || 'github.com';
+    const auth = getAuthForDomain(gistDomain);
+    if (!comment || !comment.githubCommentId || !auth) {
       return;
     }
 
+    const activeUser = auth.user;
     const newReply = {
       text: replyText,
-      author: currentUser?.login || 'Unknown',
+      author: activeUser?.login || 'Unknown',
       timestamp: Date.now()
     };
 
@@ -240,7 +365,7 @@ export function useGistCommenter() {
       {
         method: 'PATCH',
         headers: {
-          'Authorization': `${githubTokenType} ${githubToken}`,
+          'Authorization': `${auth.tokenType} ${auth.token}`,
           'Accept': 'application/vnd.github.v3+json',
           'Content-Type': 'application/json'
         },
@@ -253,11 +378,13 @@ export function useGistCommenter() {
     }
 
     await loadComments();
-  }, [comments, githubToken, githubTokenType, currentUser, currentGist, getGistApiBase, loadComments]);
+  }, [comments, currentGist, getAuthForDomain, getGistApiBase, loadComments]);
 
   const deleteComment = useCallback(async (commentId) => {
     const comment = comments.find(c => c.id === commentId);
-    if (!comment || !comment.githubCommentId || !githubToken) {
+    const gistDomain = currentGist?.domain || 'github.com';
+    const auth = getAuthForDomain(gistDomain);
+    if (!comment || !comment.githubCommentId || !auth) {
       return;
     }
 
@@ -266,92 +393,158 @@ export function useGistCommenter() {
       {
         method: 'DELETE',
         headers: {
-          'Authorization': `${githubTokenType} ${githubToken}`,
+          'Authorization': `${auth.tokenType} ${auth.token}`,
           'Accept': 'application/vnd.github.v3+json'
         }
       }
     );
 
     if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Cannot delete this comment. You can only delete comments you authored.');
+      }
       throw new Error('Failed to delete comment');
     }
 
     await loadComments();
-  }, [comments, githubToken, githubTokenType, currentGist, getGistApiBase, loadComments]);
+  }, [comments, currentGist, getAuthForDomain, getGistApiBase, loadComments]);
 
   const toggleReaction = useCallback(async (commentId, emoji) => {
     const comment = comments.find(c => c.id === commentId);
-    if (!comment || !comment.githubCommentId || !githubToken || !currentUser) {
+    const gistDomain = currentGist?.domain || 'github.com';
+    const auth = getAuthForDomain(gistDomain);
+    if (!comment || !comment.githubCommentId || !auth) {
       return;
     }
 
-    // Get current reactions or initialize empty object
+    const apiBase = getGistApiBase();
     const currentReactions = comment.reactions || {};
     const currentUsers = currentReactions[emoji] || [];
-    const userLogin = currentUser.login;
+    const userLogin = auth.user.login;
+    const content = EMOJI_TO_CONTENT[emoji];
+    if (!content) return;
 
-    // Toggle user in the reaction list
-    let updatedUsers;
-    if (currentUsers.includes(userLogin)) {
-      updatedUsers = currentUsers.filter(u => u !== userLogin);
-    } else {
-      updatedUsers = [...currentUsers, userLogin];
-    }
+    // Check if user has an existing reaction with a known reactionId
+    const existing = currentUsers.find(u => u.login === userLogin && u.reactionId > 0);
 
-    // Build updated reactions object
-    const updatedReactions = { ...currentReactions };
-    if (updatedUsers.length > 0) {
-      updatedReactions[emoji] = updatedUsers;
-    } else {
-      delete updatedReactions[emoji];
-    }
-
-    // Update local state immediately for responsive UI
-    setComments(prev => prev.map(c => {
-      if (c.id === commentId) {
-        return { ...c, reactions: updatedReactions };
+    if (existing) {
+      // We know the exact reaction ID — DELETE directly
+      const updatedReactions = { ...currentReactions };
+      const updatedUsers = currentUsers.filter(u => u.login !== userLogin);
+      if (updatedUsers.length > 0) {
+        updatedReactions[emoji] = updatedUsers;
+      } else {
+        delete updatedReactions[emoji];
       }
-      return c;
-    }));
 
-    // Update on GitHub (store reactions in comment metadata)
-    const meta = {
-      filename: comment.filename,
-      lineStart: comment.lineStart,
-      lineEnd: comment.lineEnd,
-      highlightedText: comment.highlightedText,
-      resolved: comment.resolved,
-      replies: comment.replies,
-      reactions: updatedReactions
-    };
+      setComments(prev => prev.map(c =>
+        c.id === commentId ? { ...c, reactions: updatedReactions } : c
+      ));
 
-    const body = encodeCommentMeta(meta) + comment.text;
+      try {
+        const response = await fetch(
+          `${apiBase}/gists/${currentGist.id}/comments/${comment.githubCommentId}/reactions/${existing.reactionId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `${auth.tokenType} ${auth.token}`,
+              'Accept': 'application/vnd.github+json'
+            }
+          }
+        );
 
-    try {
-      const response = await fetch(
-        `${getGistApiBase()}/gists/${currentGist.id}/comments/${comment.githubCommentId}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `${githubTokenType} ${githubToken}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ body })
+        if (!response.ok) {
+          await loadComments();
+          throw new Error('Failed to remove reaction');
         }
-      );
-
-      if (!response.ok) {
-        // Revert on failure
+      } catch (error) {
         await loadComments();
-        throw new Error('Failed to update reaction');
+        throw error;
       }
-    } catch (error) {
-      // Revert on failure
-      await loadComments();
-      throw error;
+    } else {
+      // POST the reaction. GitHub returns:
+      //   201 = newly created
+      //   200 = already exists (user already reacted with this content)
+      // If 200, the user intended to toggle OFF — so DELETE it.
+      const placeholderUser = { login: userLogin, reactionId: -1 };
+      const updatedReactions = { ...currentReactions };
+      updatedReactions[emoji] = [...currentUsers, placeholderUser];
+
+      setComments(prev => prev.map(c =>
+        c.id === commentId ? { ...c, reactions: updatedReactions } : c
+      ));
+
+      try {
+        const response = await fetch(
+          `${apiBase}/gists/${currentGist.id}/comments/${comment.githubCommentId}/reactions`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `${auth.tokenType} ${auth.token}`,
+              'Accept': 'application/vnd.github+json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content })
+          }
+        );
+
+        if (!response.ok) {
+          await loadComments();
+          throw new Error('Failed to add reaction');
+        }
+
+        const reactionData = await response.json();
+
+        if (response.status === 200) {
+          // Reaction already existed — user wants to remove it. DELETE it.
+          const removeReactions = { ...currentReactions };
+          const removeUsers = currentUsers.filter(u => u.login !== userLogin);
+          if (removeUsers.length > 0) {
+            removeReactions[emoji] = removeUsers;
+          } else {
+            delete removeReactions[emoji];
+          }
+
+          setComments(prev => prev.map(c =>
+            c.id === commentId ? { ...c, reactions: removeReactions } : c
+          ));
+
+          const delResponse = await fetch(
+            `${apiBase}/gists/${currentGist.id}/comments/${comment.githubCommentId}/reactions/${reactionData.id}`,
+            {
+              method: 'DELETE',
+              headers: {
+                'Authorization': `${auth.tokenType} ${auth.token}`,
+                'Accept': 'application/vnd.github+json'
+              }
+            }
+          );
+
+          if (!delResponse.ok) {
+            await loadComments();
+            throw new Error('Failed to remove reaction');
+          }
+        } else {
+          // 201 — newly created, update local state with real reaction ID
+          setComments(prev => prev.map(c => {
+            if (c.id === commentId) {
+              const updReactions = { ...c.reactions };
+              updReactions[emoji] = (updReactions[emoji] || []).map(u =>
+                u.login === userLogin && u.reactionId === -1
+                  ? { login: userLogin, reactionId: reactionData.id }
+                  : u
+              );
+              return { ...c, reactions: updReactions };
+            }
+            return c;
+          }));
+        }
+      } catch (error) {
+        await loadComments();
+        throw error;
+      }
     }
-  }, [comments, githubToken, githubTokenType, currentUser, currentGist, getGistApiBase, loadComments]);
+  }, [comments, currentGist, getAuthForDomain, getGistApiBase, loadComments]);
 
   const authenticate = useCallback(async (token, domain) => {
     const apiBase = getApiBase(domain);
@@ -364,7 +557,7 @@ export function useGistCommenter() {
       }
     });
 
-    if (!response.ok && response.status === 401) {
+    if (!response.ok && (response.status === 401 || response.status === 403)) {
       tokenType = 'token';
       response = await fetch(`${apiBase}/user`, {
         headers: {
@@ -388,27 +581,29 @@ export function useGistCommenter() {
     }
 
     const user = await response.json();
-    setCurrentUser(user);
-    setGithubToken(token);
-    setGithubTokenType(tokenType);
-    setGithubDomain(domain);
-    localStorage.setItem('github-token', token);
-    localStorage.setItem('github-token-type', tokenType);
-    localStorage.setItem('github-domain', domain);
-    localStorage.setItem('github-user', JSON.stringify(user));
+    setAccounts(prev => {
+      const next = { ...prev, [domain]: { token, tokenType, user } };
+      saveAccounts(next);
+      return next;
+    });
 
     return user;
   }, []);
 
-  const signOut = useCallback(() => {
-    setGithubToken(null);
-    setGithubTokenType('Bearer');
-    setCurrentUser(null);
-    setGithubDomain('github.com');
-    localStorage.removeItem('github-token');
-    localStorage.removeItem('github-token-type');
-    localStorage.removeItem('github-domain');
-    localStorage.removeItem('github-user');
+  const signOut = useCallback((domain) => {
+    if (domain) {
+      // Sign out of a specific domain
+      setAccounts(prev => {
+        const next = { ...prev };
+        delete next[domain];
+        saveAccounts(next);
+        return next;
+      });
+    } else {
+      // Sign out of all domains
+      setAccounts({});
+      saveAccounts({});
+    }
   }, []);
 
   useEffect(() => {
@@ -420,6 +615,7 @@ export function useGistCommenter() {
   return {
     currentGist,
     comments,
+    accounts,
     githubToken,
     githubDomain,
     currentUser,

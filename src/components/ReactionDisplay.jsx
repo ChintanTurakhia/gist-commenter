@@ -12,7 +12,7 @@ export function ReactionDisplay({ reactions = {}, currentUser, onToggleReaction 
   // Check if current user has reacted with a specific emoji
   const hasReacted = (emoji) => {
     const users = reactions[emoji] || [];
-    return currentUser && users.includes(currentUser.login);
+    return currentUser && users.some(u => u.login === currentUser.login);
   };
 
   // Handle reaction click
@@ -28,7 +28,7 @@ export function ReactionDisplay({ reactions = {}, currentUser, onToggleReaction 
           key={emoji}
           className={`reaction-btn ${hasReacted(emoji) ? 'active' : ''}`}
           onClick={() => handleReactionClick(emoji)}
-          title={users.join(', ')}
+          title={users.filter(u => u.login).map(u => u.login).join(', ') || `${users.length} reaction${users.length !== 1 ? 's' : ''}`}
           disabled={!currentUser}
         >
           <span className="reaction-emoji">{emoji}</span>

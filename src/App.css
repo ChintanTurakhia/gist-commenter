@@ -1027,6 +1027,28 @@ tr.flash-highlight .line-number {
     gap: 10px;
 }
 
+.auth-cta-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 20px;
+    background: rgba(136, 98, 235, 0.1);
+    border-bottom: 1px solid rgba(136, 98, 235, 0.25);
+}
+
+.auth-cta-banner p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.auth-cta-banner .btn-sm {
+    padding: 6px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
 .filter-btn {
     padding: 8px 16px;
     min-width: 80px;

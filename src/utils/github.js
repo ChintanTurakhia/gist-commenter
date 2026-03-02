@@ -1,5 +1,14 @@
 // GitHub API utilities
 
+// Mapping between emoji and GitHub Reactions API content values
+export const EMOJI_TO_CONTENT = {
+  '👍': '+1', '👎': '-1', '😄': 'laugh', '😕': 'confused',
+  '❤️': 'heart', '🎉': 'hooray', '🚀': 'rocket', '👀': 'eyes'
+};
+export const CONTENT_TO_EMOJI = Object.fromEntries(
+  Object.entries(EMOJI_TO_CONTENT).map(([k, v]) => [v, k])
+);
+
 export function parseGistUrl(url) {
   try {
     const urlObj = new URL(url);
