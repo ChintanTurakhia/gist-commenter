@@ -181,19 +181,18 @@ export function useSyncScroll({
   const scrollGistToLine = useCallback((filename, lineStart) => {
     acquireScrollLock('manual');
 
-    // Find the scrollable container
     const container = gistFilesRef.current || document.querySelector('.gist-files');
     if (!container) return;
 
     const fileBlock = container.querySelector(`[data-filename="${filename}"]`);
     if (!fileBlock) return;
 
-    // Try raw mode first: find the <tr data-line> element
+    // Raw mode: find the <tr data-line> element directly
     let targetEl = fileBlock.querySelector(`[data-line="${lineStart}"]`);
 
-    // Preview mode fallback: find <mark data-line-start> element
+    // Preview mode fallback
     if (!targetEl) {
-      // Find the mark whose range contains this line
+      // 1. Try <mark data-line-start> elements
       const marks = fileBlock.querySelectorAll('mark[data-line-start]');
       for (const mark of marks) {
         const markStart = parseInt(mark.dataset.lineStart, 10);
@@ -203,13 +202,39 @@ export function useSyncScroll({
           break;
         }
       }
+
+      // 2. Try any <mark> with highlighted-text class
+      if (!targetEl) {
+        const allMarks = fileBlock.querySelectorAll('mark.highlighted-text');
+        if (allMarks.length > 0) {
+          targetEl = allMarks[0]; // scroll to first highlight in file
+        }
+      }
+
+      // 3. Final fallback: proportional scroll based on line position
+      if (!targetEl) {
+        const preview = fileBlock.querySelector('.markdown-preview');
+        if (preview) {
+          const fileContent = fileBlock.querySelector('.file-content');
+          const totalHeight = fileContent ? fileContent.scrollHeight : preview.scrollHeight;
+          // Estimate line count from the content
+          const textContent = preview.textContent || '';
+          const approxLines = textContent.split('\n').length || 1;
+          const ratio = Math.min(1, (lineStart - 1) / approxLines);
+          const targetTop = fileBlock.offsetTop + (totalHeight * ratio);
+          container.scrollTo({
+            top: Math.max(0, targetTop - container.clientHeight / 2),
+            behavior: 'smooth'
+          });
+          return;
+        }
+      }
     }
 
     if (targetEl) {
       const elRect = targetEl.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
 
-      // Calculate scroll position to center the element in the container
       const targetScrollTop = container.scrollTop +
         (elRect.top - containerRect.top) -
         (containerRect.height / 2) +
@@ -220,7 +245,6 @@ export function useSyncScroll({
         behavior: 'smooth'
       });
 
-      // Flash highlight the element
       targetEl.classList.add('flash-highlight');
       setTimeout(() => targetEl.classList.remove('flash-highlight'), 1500);
     }

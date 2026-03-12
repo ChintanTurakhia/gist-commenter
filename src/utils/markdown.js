@@ -21,7 +21,8 @@ const ALLOWED_TAGS = [
 // Whitelist of safe attributes
 const ALLOWED_ATTR = [
   'href', 'src', 'alt', 'title', 'class',
-  'target', 'rel'
+  'target', 'rel',
+  'data-line-start', 'data-line-end'
 ];
 
 // Configure DOMPurify
