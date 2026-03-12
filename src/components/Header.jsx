@@ -27,7 +27,7 @@ export function addRecentGist(gist) {
   localStorage.setItem('recent-gists', JSON.stringify(recents.slice(0, MAX_RECENTS)));
 }
 
-export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle, onDashboardClick, pendingCount, githubDomain, inputRef }) {
+export function Header({ currentUser, currentGist, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle, onDashboardClick, pendingCount, githubDomain, inputRef }) {
   const [gistUrl, setGistUrl] = useState('');
   const [showRecents, setShowRecents] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -39,6 +39,14 @@ export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loadin
   useEffect(() => {
     setRecents(getRecentGists());
   }, []);
+
+  // Populate input with gist URL when a gist is loaded (including on page reload)
+  useEffect(() => {
+    if (currentGist) {
+      const url = currentGist.html_url || `https://gist.github.com/${currentGist.owner?.login}/${currentGist.id}`;
+      setGistUrl(url);
+    }
+  }, [currentGist?.id]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {

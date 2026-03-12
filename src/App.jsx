@@ -224,6 +224,7 @@ function App() {
     <div className="app-container">
       <Header
         currentUser={currentUser}
+        currentGist={currentGist}
         loading={loading}
         onLoadGist={handleLoadGist}
         onAuthClick={() => setAuthModalOpen(true)}
