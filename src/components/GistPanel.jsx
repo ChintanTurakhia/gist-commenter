@@ -57,6 +57,42 @@ function isMarkdownFile(filename) {
   return ['md', 'markdown', 'mdown', 'mkd', 'mkdn'].includes(ext);
 }
 
+// Find source line range that contains the selected text from preview
+function findSourceLines(content, selectedText) {
+  const lines = content.split('\n');
+  const normalizedSelection = selectedText.replace(/\s+/g, ' ').trim();
+  if (!normalizedSelection) return null;
+
+  // Try to find a contiguous range of lines whose combined text contains the selection
+  for (let start = 0; start < lines.length; start++) {
+    let combined = '';
+    for (let end = start; end < lines.length; end++) {
+      combined += (end > start ? ' ' : '') + lines[end];
+      const normalizedCombined = combined.replace(/\s+/g, ' ').trim();
+      if (normalizedCombined.includes(normalizedSelection)) {
+        return { lineStart: start + 1, lineEnd: end + 1 };
+      }
+      // Stop expanding if we've gone well past the selection length
+      if (normalizedCombined.length > normalizedSelection.length * 3) break;
+    }
+  }
+
+  // Fallback: match using first/last words of selection
+  const words = normalizedSelection.split(' ');
+  const firstWord = words[0];
+  const lastWord = words[words.length - 1];
+  let startLine = -1, endLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (startLine === -1 && lines[i].includes(firstWord)) startLine = i + 1;
+    if (lines[i].includes(lastWord)) endLine = i + 1;
+  }
+  if (startLine > 0 && endLine >= startLine) {
+    return { lineStart: startLine, lineEnd: endLine };
+  }
+
+  return null;
+}
+
 // Memoized markdown preview component
 const MarkdownPreview = memo(function MarkdownPreview({ content }) {
   const html = useMemo(() => parseMarkdown(content), [content]);
@@ -131,7 +167,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
 
     const filename = fileBlock.dataset.filename;
 
-    // Get line numbers
+    // Get line numbers - either from table rows (raw mode) or by text matching (preview mode)
     const startContainer = range.startContainer;
     const endContainer = range.endContainer;
 
@@ -142,13 +178,32 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
       ? endContainer.closest('tr')
       : endContainer.parentElement?.closest('tr');
 
-    if (!startRow || !endRow) {
-      setSelectionTooltip(null);
-      return;
-    }
+    let lineStart, lineEnd;
 
-    const lineStart = parseInt(startRow.dataset.line, 10);
-    const lineEnd = parseInt(endRow.dataset.line, 10);
+    if (startRow && endRow) {
+      // Raw mode: read line numbers from table rows
+      lineStart = parseInt(startRow.dataset.line, 10);
+      lineEnd = parseInt(endRow.dataset.line, 10);
+    } else {
+      // Preview mode: map selected text back to source lines
+      const previewEl = fileBlock.querySelector('.markdown-preview');
+      if (!previewEl) {
+        setSelectionTooltip(null);
+        return;
+      }
+      const file = gist?.files?.[filename];
+      if (!file) {
+        setSelectionTooltip(null);
+        return;
+      }
+      const mapped = findSourceLines(file.content, selectedText);
+      if (!mapped) {
+        setSelectionTooltip(null);
+        return;
+      }
+      lineStart = mapped.lineStart;
+      lineEnd = mapped.lineEnd;
+    }
 
     // Position tooltip above the selection, accounting for scroll
     const containerRect = filesRef.current.getBoundingClientRect();
@@ -178,7 +233,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
       lineStart,
       lineEnd
     });
-  }, [selectionTooltip]);
+  }, [selectionTooltip, gist]);
 
   const handleTooltipClick = () => {
     if (!selectionTooltip) return;

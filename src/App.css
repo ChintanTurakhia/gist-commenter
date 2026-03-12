@@ -847,9 +847,9 @@ body::before {
 .markdown-preview {
     padding: 20px;
     line-height: 1.7;
-    user-select: none;
-    -webkit-user-select: none;
-    cursor: default;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
 }
 
 .file-content.preview-mode {
