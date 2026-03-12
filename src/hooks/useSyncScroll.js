@@ -95,28 +95,40 @@ export function useSyncScroll({
 
     fileBlocks.forEach(fileBlock => {
       const filename = fileBlock.dataset.filename;
+
+      // Raw mode: check <tr data-line> elements
       const rows = fileBlock.querySelectorAll('tr[data-line]');
-
-      rows.forEach(row => {
-        const rowRect = row.getBoundingClientRect();
-
-        // Check if row is visible in viewport
-        if (rowRect.bottom >= containerRect.top && rowRect.top <= containerRect.bottom) {
-          const lineNum = parseInt(row.dataset.line, 10);
-
-          // Calculate visibility score (higher = more centered in viewport)
-          const rowCenter = rowRect.top + rowRect.height / 2;
-          const containerCenter = containerRect.top + containerRect.height / 2;
-          const distanceFromCenter = Math.abs(rowCenter - containerCenter);
-          const visibility = 1 - (distanceFromCenter / (containerRect.height / 2));
-
-          visibleLines.push({
-            filename,
-            line: lineNum,
-            visibility: Math.max(0, visibility)
-          });
-        }
-      });
+      if (rows.length > 0) {
+        rows.forEach(row => {
+          const rowRect = row.getBoundingClientRect();
+          if (rowRect.bottom >= containerRect.top && rowRect.top <= containerRect.bottom) {
+            const lineNum = parseInt(row.dataset.line, 10);
+            const rowCenter = rowRect.top + rowRect.height / 2;
+            const containerCenter = containerRect.top + containerRect.height / 2;
+            const distanceFromCenter = Math.abs(rowCenter - containerCenter);
+            const visibility = 1 - (distanceFromCenter / (containerRect.height / 2));
+            visibleLines.push({ filename, line: lineNum, visibility: Math.max(0, visibility) });
+          }
+        });
+      } else {
+        // Preview mode: check <mark data-line-start> elements
+        const marks = fileBlock.querySelectorAll('mark[data-line-start]');
+        marks.forEach(mark => {
+          const markRect = mark.getBoundingClientRect();
+          if (markRect.bottom >= containerRect.top && markRect.top <= containerRect.bottom) {
+            const lineStart = parseInt(mark.dataset.lineStart, 10);
+            const lineEnd = parseInt(mark.dataset.lineEnd || lineStart, 10);
+            const markCenter = markRect.top + markRect.height / 2;
+            const containerCenter = containerRect.top + containerRect.height / 2;
+            const distanceFromCenter = Math.abs(markCenter - containerCenter);
+            const visibility = 1 - (distanceFromCenter / (containerRect.height / 2));
+            // Emit entries for each line in the range so findRelevantComments matches
+            for (let line = lineStart; line <= lineEnd; line++) {
+              visibleLines.push({ filename, line, visibility: Math.max(0, visibility) });
+            }
+          }
+        });
+      }
     });
 
     return visibleLines;
@@ -173,29 +185,44 @@ export function useSyncScroll({
     const container = gistFilesRef.current || document.querySelector('.gist-files');
     if (!container) return;
 
-    // Find the line element
-    const lineEl = document.querySelector(
-      `[data-filename="${filename}"] [data-line="${lineStart}"]`
-    );
+    const fileBlock = container.querySelector(`[data-filename="${filename}"]`);
+    if (!fileBlock) return;
 
-    if (lineEl) {
-      const lineRect = lineEl.getBoundingClientRect();
+    // Try raw mode first: find the <tr data-line> element
+    let targetEl = fileBlock.querySelector(`[data-line="${lineStart}"]`);
+
+    // Preview mode fallback: find <mark data-line-start> element
+    if (!targetEl) {
+      // Find the mark whose range contains this line
+      const marks = fileBlock.querySelectorAll('mark[data-line-start]');
+      for (const mark of marks) {
+        const markStart = parseInt(mark.dataset.lineStart, 10);
+        const markEnd = parseInt(mark.dataset.lineEnd, 10);
+        if (lineStart >= markStart && lineStart <= markEnd) {
+          targetEl = mark;
+          break;
+        }
+      }
+    }
+
+    if (targetEl) {
+      const elRect = targetEl.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
 
-      // Calculate scroll position to center the line in the container
+      // Calculate scroll position to center the element in the container
       const targetScrollTop = container.scrollTop +
-        (lineRect.top - containerRect.top) -
+        (elRect.top - containerRect.top) -
         (containerRect.height / 2) +
-        (lineRect.height / 2);
+        (elRect.height / 2);
 
       container.scrollTo({
         top: Math.max(0, targetScrollTop),
         behavior: 'smooth'
       });
 
-      // Flash highlight the line
-      lineEl.classList.add('flash-highlight');
-      setTimeout(() => lineEl.classList.remove('flash-highlight'), 1500);
+      // Flash highlight the element
+      targetEl.classList.add('flash-highlight');
+      setTimeout(() => targetEl.classList.remove('flash-highlight'), 1500);
     }
   }, [acquireScrollLock]);
 

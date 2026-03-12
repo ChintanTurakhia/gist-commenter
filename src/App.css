@@ -977,6 +977,11 @@ tr.flash-highlight .line-number {
     }
 }
 
+/* Flash highlight for scroll-to-line in preview mode */
+mark.flash-highlight {
+    animation: flashHighlight 1.5s ease-out;
+}
+
 /* Highlighted text */
 .highlighted-text {
     background: var(--highlight-color);

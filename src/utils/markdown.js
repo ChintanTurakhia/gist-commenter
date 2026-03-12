@@ -28,7 +28,7 @@ const ALLOWED_ATTR = [
 DOMPurify.setConfig({
   ALLOWED_TAGS,
   ALLOWED_ATTR,
-  ALLOW_DATA_ATTR: false,
+  ALLOW_DATA_ATTR: true,
 });
 
 // Add hook to make links open in new tab

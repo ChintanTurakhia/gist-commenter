@@ -98,19 +98,34 @@ const MarkdownPreview = memo(function MarkdownPreview({ content, highlightedRang
   const html = useMemo(() => {
     if (!highlightedRanges || highlightedRanges.length === 0) return parseMarkdown(content);
 
-    // Build a set of 1-indexed line numbers that should be highlighted
-    const highlightedLines = new Set();
-    for (const r of highlightedRanges) {
-      for (let i = r.lineStart; i <= r.lineEnd; i++) highlightedLines.add(i);
-    }
+    // Build a map: lineNumber -> [{rangeIndex, isStart, isEnd}]
+    const lineInfo = new Map();
+    highlightedRanges.forEach((r, idx) => {
+      for (let i = r.lineStart; i <= r.lineEnd; i++) {
+        if (!lineInfo.has(i)) lineInfo.set(i, []);
+        lineInfo.get(i).push({
+          idx,
+          isStart: i === r.lineStart,
+          isEnd: i === r.lineEnd,
+          lineStart: r.lineStart,
+          lineEnd: r.lineEnd
+        });
+      }
+    });
 
-    // Wrap highlighted source lines with <mark> before parsing markdown
+    // Annotate source lines with <mark> tags including data attributes for scroll targeting
     const lines = content.split('\n');
     const annotated = lines.map((line, i) => {
-      if (highlightedLines.has(i + 1) && line.trim()) {
-        return `<mark class="highlighted-text">${line}</mark>`;
+      const lineNum = i + 1;
+      const info = lineInfo.get(lineNum);
+      if (!info || !line.trim()) return line;
+
+      // Use the first range that starts on this line for the data attributes
+      const startInfo = info.find(r => r.isStart);
+      if (startInfo) {
+        return `<mark class="highlighted-text" data-line-start="${startInfo.lineStart}" data-line-end="${startInfo.lineEnd}">${line}</mark>`;
       }
-      return line;
+      return `<mark class="highlighted-text">${line}</mark>`;
     }).join('\n');
 
     return parseMarkdown(annotated);
