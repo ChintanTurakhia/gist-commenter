@@ -94,8 +94,28 @@ function findSourceLines(content, selectedText) {
 }
 
 // Memoized markdown preview component
-const MarkdownPreview = memo(function MarkdownPreview({ content }) {
-  const html = useMemo(() => parseMarkdown(content), [content]);
+const MarkdownPreview = memo(function MarkdownPreview({ content, highlightedRanges }) {
+  const html = useMemo(() => {
+    if (!highlightedRanges || highlightedRanges.length === 0) return parseMarkdown(content);
+
+    // Build a set of 1-indexed line numbers that should be highlighted
+    const highlightedLines = new Set();
+    for (const r of highlightedRanges) {
+      for (let i = r.lineStart; i <= r.lineEnd; i++) highlightedLines.add(i);
+    }
+
+    // Wrap highlighted source lines with <mark> before parsing markdown
+    const lines = content.split('\n');
+    const annotated = lines.map((line, i) => {
+      if (highlightedLines.has(i + 1) && line.trim()) {
+        return `<mark class="highlighted-text">${line}</mark>`;
+      }
+      return line;
+    }).join('\n');
+
+    return parseMarkdown(annotated);
+  }, [content, highlightedRanges]);
+
   return (
     <div
       className="markdown-preview markdown-content"
@@ -106,7 +126,7 @@ const MarkdownPreview = memo(function MarkdownPreview({ content }) {
 
 export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, filesRef: externalFilesRef, onScroll }) {
   const [selectionTooltip, setSelectionTooltip] = useState(null);
-  const [viewMode, setViewMode] = useState('raw'); // 'raw' or 'preview'
+  const [viewMode, setViewMode] = useState(() => 'raw'); // will be set to 'preview' when md files load
   const internalFilesRef = useRef(null);
   // Use external ref if provided, otherwise use internal
   const filesRef = externalFilesRef || internalFilesRef;
@@ -116,6 +136,12 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
     if (!gist?.files) return false;
     return Object.keys(gist.files).some(isMarkdownFile);
   }, [gist?.files]);
+
+  // Auto-switch to preview mode when loading a gist with markdown files
+  useEffect(() => {
+    if (hasMarkdownFiles) setViewMode('preview');
+    else setViewMode('raw');
+  }, [gist?.id]);
 
   // Memoize highlighted ranges grouped by filename to prevent re-renders
   const highlightedRangesByFile = useMemo(() => {
@@ -367,7 +393,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
               </div>
               <div className={`file-content ${showPreview ? 'preview-mode' : ''}`}>
                 {showPreview ? (
-                  <MarkdownPreview content={file.content} />
+                  <MarkdownPreview content={file.content} highlightedRanges={highlightedRangesByFile[filename] || []} />
                 ) : (
                   <FileContent
                     filename={filename}

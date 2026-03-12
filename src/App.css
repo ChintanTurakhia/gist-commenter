@@ -996,6 +996,13 @@ tr.flash-highlight .line-number {
     box-shadow: 0 0 0 2px var(--accent-blue), 0 0 20px rgba(88, 166, 255, 0.3);
 }
 
+/* Comment highlights in markdown preview */
+.markdown-preview mark.highlighted-text {
+    background: var(--highlight-color);
+    color: inherit;
+    padding: 2px 0;
+}
+
 /* Comments Panel - Glass Style */
 .comments-panel {
     display: flex;
