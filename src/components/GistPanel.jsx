@@ -77,16 +77,20 @@ function findSourceLines(content, selectedText) {
     }
   }
 
-  // Fallback: match using first/last words of selection
+  // Fallback: match using first/last words of selection (only for short, specific words)
   const words = normalizedSelection.split(' ');
+  if (words.length < 2) return null;
   const firstWord = words[0];
   const lastWord = words[words.length - 1];
+  // Skip fallback if words are too common (3 chars or less)
+  if (firstWord.length <= 3 || lastWord.length <= 3) return null;
   let startLine = -1, endLine = -1;
   for (let i = 0; i < lines.length; i++) {
     if (startLine === -1 && lines[i].includes(firstWord)) startLine = i + 1;
     if (lines[i].includes(lastWord)) endLine = i + 1;
   }
-  if (startLine > 0 && endLine >= startLine) {
+  // Only accept fallback if the range is reasonably bounded
+  if (startLine > 0 && endLine >= startLine && (endLine - startLine) <= 20) {
     return { lineStart: startLine, lineEnd: endLine };
   }
 
@@ -113,12 +117,15 @@ const MarkdownPreview = memo(function MarkdownPreview({ content, highlightedRang
       }
     });
 
-    // Annotate source lines with <mark> tags including data attributes for scroll targeting
+    // Annotate source lines with <mark> tags, skipping lines inside fenced code blocks
     const lines = content.split('\n');
+    let inCodeBlock = false;
     const annotated = lines.map((line, i) => {
+      // Track fenced code block boundaries
+      if (line.trimStart().startsWith('```')) inCodeBlock = !inCodeBlock;
       const lineNum = i + 1;
       const info = lineInfo.get(lineNum);
-      if (!info || !line.trim()) return line;
+      if (!info || !line.trim() || inCodeBlock) return line;
 
       // Use the first range that starts on this line for the data attributes
       const startInfo = info.find(r => r.isStart);
@@ -156,7 +163,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
   useEffect(() => {
     if (hasMarkdownFiles) setViewMode('preview');
     else setViewMode('raw');
-  }, [gist?.id]);
+  }, [gist?.id, hasMarkdownFiles]);
 
   // Memoize highlighted ranges grouped by filename to prevent re-renders
   const highlightedRangesByFile = useMemo(() => {
@@ -247,6 +254,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
     }
 
     // Position tooltip above the selection, accounting for scroll
+    if (!filesRef.current) return;
     const containerRect = filesRef.current.getBoundingClientRect();
     const scrollTop = filesRef.current.scrollTop;
 
