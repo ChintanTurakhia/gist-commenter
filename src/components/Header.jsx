@@ -18,9 +18,10 @@ export function addRecentGist(gist) {
   if (exists >= 0) {
     recents.splice(exists, 1);
   }
+  const domain = gist.domain || 'github.com';
   recents.unshift({
     id: gist.id,
-    url: gist.html_url || `https://gist.github.com/${gist.owner?.login}/${gist.id}`,
+    url: gist.html_url || `https://gist.${domain}/${gist.owner?.login}/${gist.id}`,
     description: gist.description || 'Untitled Gist',
     owner: gist.owner?.login || 'Unknown'
   });
@@ -43,10 +44,11 @@ export function Header({ currentUser, currentGist, onLoadGist, onAuthClick, onSi
   // Populate input with gist URL when a gist is loaded (including on page reload)
   useEffect(() => {
     if (currentGist) {
-      const url = currentGist.html_url || `https://gist.github.com/${currentGist.owner?.login}/${currentGist.id}`;
+      const domain = currentGist.domain || githubDomain || 'github.com';
+      const url = currentGist.html_url || `https://gist.${domain}/${currentGist.owner?.login}/${currentGist.id}`;
       setGistUrl(url);
     }
-  }, [currentGist?.id]);
+  }, [currentGist?.id, currentGist?.domain, githubDomain]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
