@@ -15,13 +15,14 @@ const ALLOWED_TAGS = [
   'ul', 'ol', 'li',
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'table', 'thead', 'tbody', 'tr', 'th', 'td',
-  'hr', 'span', 'div'
+  'hr', 'span', 'div', 'mark'
 ];
 
 // Whitelist of safe attributes
 const ALLOWED_ATTR = [
   'href', 'src', 'alt', 'title', 'class',
-  'target', 'rel'
+  'target', 'rel',
+  'data-line-start', 'data-line-end'
 ];
 
 // Configure DOMPurify

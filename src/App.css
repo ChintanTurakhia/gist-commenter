@@ -847,9 +847,9 @@ body::before {
 .markdown-preview {
     padding: 20px;
     line-height: 1.7;
-    user-select: none;
-    -webkit-user-select: none;
-    cursor: default;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
 }
 
 .file-content.preview-mode {
@@ -977,6 +977,11 @@ tr.flash-highlight .line-number {
     }
 }
 
+/* Flash highlight for scroll-to-line in preview mode */
+mark.flash-highlight {
+    animation: flashHighlight 1.5s ease-out;
+}
+
 /* Highlighted text */
 .highlighted-text {
     background: var(--highlight-color);
@@ -994,6 +999,13 @@ tr.flash-highlight .line-number {
 .highlighted-text.active {
     background: var(--highlight-active);
     box-shadow: 0 0 0 2px var(--accent-blue), 0 0 20px rgba(88, 166, 255, 0.3);
+}
+
+/* Comment highlights in markdown preview */
+.markdown-preview mark.highlighted-text {
+    background: var(--highlight-color);
+    color: inherit;
+    padding: 2px 0;
 }
 
 /* Comments Panel - Glass Style */

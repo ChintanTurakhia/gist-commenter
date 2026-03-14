@@ -18,16 +18,17 @@ export function addRecentGist(gist) {
   if (exists >= 0) {
     recents.splice(exists, 1);
   }
+  const domain = gist.domain || 'github.com';
   recents.unshift({
     id: gist.id,
-    url: gist.html_url || `https://gist.github.com/${gist.owner?.login}/${gist.id}`,
+    url: gist.html_url || `https://gist.${domain}/${gist.owner?.login}/${gist.id}`,
     description: gist.description || 'Untitled Gist',
     owner: gist.owner?.login || 'Unknown'
   });
   localStorage.setItem('recent-gists', JSON.stringify(recents.slice(0, MAX_RECENTS)));
 }
 
-export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle, onDashboardClick, pendingCount, githubDomain, inputRef }) {
+export function Header({ currentUser, currentGist, onLoadGist, onAuthClick, onSignOut, loading, theme, onThemeToggle, onDashboardClick, pendingCount, githubDomain, inputRef }) {
   const [gistUrl, setGistUrl] = useState('');
   const [showRecents, setShowRecents] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -39,6 +40,15 @@ export function Header({ currentUser, onLoadGist, onAuthClick, onSignOut, loadin
   useEffect(() => {
     setRecents(getRecentGists());
   }, []);
+
+  // Populate input with gist URL when a gist is loaded (including on page reload)
+  useEffect(() => {
+    if (currentGist) {
+      const domain = currentGist.domain || githubDomain || 'github.com';
+      const url = currentGist.html_url || `https://gist.${domain}/${currentGist.owner?.login}/${currentGist.id}`;
+      setGistUrl(url);
+    }
+  }, [currentGist?.id, currentGist?.domain, githubDomain]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {

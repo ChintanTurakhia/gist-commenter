@@ -57,9 +57,87 @@ function isMarkdownFile(filename) {
   return ['md', 'markdown', 'mdown', 'mkd', 'mkdn'].includes(ext);
 }
 
+// Find source line range that contains the selected text from preview
+function findSourceLines(content, selectedText) {
+  const lines = content.split('\n');
+  const normalizedSelection = selectedText.replace(/\s+/g, ' ').trim();
+  if (!normalizedSelection) return null;
+
+  // Try to find a contiguous range of lines whose combined text contains the selection
+  for (let start = 0; start < lines.length; start++) {
+    let combined = '';
+    for (let end = start; end < lines.length; end++) {
+      combined += (end > start ? ' ' : '') + lines[end];
+      const normalizedCombined = combined.replace(/\s+/g, ' ').trim();
+      if (normalizedCombined.includes(normalizedSelection)) {
+        return { lineStart: start + 1, lineEnd: end + 1 };
+      }
+      // Stop expanding if we've gone well past the selection length
+      if (normalizedCombined.length > normalizedSelection.length * 3) break;
+    }
+  }
+
+  // Fallback: match using first/last words of selection (only for short, specific words)
+  const words = normalizedSelection.split(' ');
+  if (words.length < 2) return null;
+  const firstWord = words[0];
+  const lastWord = words[words.length - 1];
+  // Skip fallback if words are too common (3 chars or less)
+  if (firstWord.length <= 3 || lastWord.length <= 3) return null;
+  let startLine = -1, endLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (startLine === -1 && lines[i].includes(firstWord)) startLine = i + 1;
+    if (lines[i].includes(lastWord)) endLine = i + 1;
+  }
+  // Only accept fallback if the range is reasonably bounded
+  if (startLine > 0 && endLine >= startLine && (endLine - startLine) <= 20) {
+    return { lineStart: startLine, lineEnd: endLine };
+  }
+
+  return null;
+}
+
 // Memoized markdown preview component
-const MarkdownPreview = memo(function MarkdownPreview({ content }) {
-  const html = useMemo(() => parseMarkdown(content), [content]);
+const MarkdownPreview = memo(function MarkdownPreview({ content, highlightedRanges }) {
+  const html = useMemo(() => {
+    if (!highlightedRanges || highlightedRanges.length === 0) return parseMarkdown(content);
+
+    // Build a map: lineNumber -> [{rangeIndex, isStart, isEnd}]
+    const lineInfo = new Map();
+    highlightedRanges.forEach((r, idx) => {
+      for (let i = r.lineStart; i <= r.lineEnd; i++) {
+        if (!lineInfo.has(i)) lineInfo.set(i, []);
+        lineInfo.get(i).push({
+          idx,
+          isStart: i === r.lineStart,
+          isEnd: i === r.lineEnd,
+          lineStart: r.lineStart,
+          lineEnd: r.lineEnd
+        });
+      }
+    });
+
+    // Annotate source lines with <mark> tags, skipping lines inside fenced code blocks
+    const lines = content.split('\n');
+    let inCodeBlock = false;
+    const annotated = lines.map((line, i) => {
+      // Track fenced code block boundaries
+      if (line.trimStart().startsWith('```')) inCodeBlock = !inCodeBlock;
+      const lineNum = i + 1;
+      const info = lineInfo.get(lineNum);
+      if (!info || !line.trim() || inCodeBlock) return line;
+
+      // Use the first range that starts on this line for the data attributes
+      const startInfo = info.find(r => r.isStart);
+      if (startInfo) {
+        return `<mark class="highlighted-text" data-line-start="${startInfo.lineStart}" data-line-end="${startInfo.lineEnd}">${line}</mark>`;
+      }
+      return `<mark class="highlighted-text">${line}</mark>`;
+    }).join('\n');
+
+    return parseMarkdown(annotated);
+  }, [content, highlightedRanges]);
+
   return (
     <div
       className="markdown-preview markdown-content"
@@ -70,7 +148,7 @@ const MarkdownPreview = memo(function MarkdownPreview({ content }) {
 
 export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, filesRef: externalFilesRef, onScroll }) {
   const [selectionTooltip, setSelectionTooltip] = useState(null);
-  const [viewMode, setViewMode] = useState('raw'); // 'raw' or 'preview'
+  const [viewMode, setViewMode] = useState(() => 'raw'); // will be set to 'preview' when md files load
   const internalFilesRef = useRef(null);
   // Use external ref if provided, otherwise use internal
   const filesRef = externalFilesRef || internalFilesRef;
@@ -80,6 +158,12 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
     if (!gist?.files) return false;
     return Object.keys(gist.files).some(isMarkdownFile);
   }, [gist?.files]);
+
+  // Auto-switch to preview mode when loading a gist with markdown files
+  useEffect(() => {
+    if (hasMarkdownFiles) setViewMode('preview');
+    else setViewMode('raw');
+  }, [gist?.id, hasMarkdownFiles]);
 
   // Memoize highlighted ranges grouped by filename to prevent re-renders
   const highlightedRangesByFile = useMemo(() => {
@@ -131,7 +215,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
 
     const filename = fileBlock.dataset.filename;
 
-    // Get line numbers
+    // Get line numbers - either from table rows (raw mode) or by text matching (preview mode)
     const startContainer = range.startContainer;
     const endContainer = range.endContainer;
 
@@ -142,15 +226,35 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
       ? endContainer.closest('tr')
       : endContainer.parentElement?.closest('tr');
 
-    if (!startRow || !endRow) {
-      setSelectionTooltip(null);
-      return;
+    let lineStart, lineEnd;
+
+    if (startRow && endRow) {
+      // Raw mode: read line numbers from table rows
+      lineStart = parseInt(startRow.dataset.line, 10);
+      lineEnd = parseInt(endRow.dataset.line, 10);
+    } else {
+      // Preview mode: map selected text back to source lines
+      const previewEl = fileBlock.querySelector('.markdown-preview');
+      if (!previewEl) {
+        setSelectionTooltip(null);
+        return;
+      }
+      const file = gist?.files?.[filename];
+      if (!file) {
+        setSelectionTooltip(null);
+        return;
+      }
+      const mapped = findSourceLines(file.content, selectedText);
+      if (!mapped) {
+        setSelectionTooltip(null);
+        return;
+      }
+      lineStart = mapped.lineStart;
+      lineEnd = mapped.lineEnd;
     }
 
-    const lineStart = parseInt(startRow.dataset.line, 10);
-    const lineEnd = parseInt(endRow.dataset.line, 10);
-
     // Position tooltip above the selection, accounting for scroll
+    if (!filesRef.current) return;
     const containerRect = filesRef.current.getBoundingClientRect();
     const scrollTop = filesRef.current.scrollTop;
 
@@ -178,7 +282,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
       lineStart,
       lineEnd
     });
-  }, [selectionTooltip]);
+  }, [selectionTooltip, gist]);
 
   const handleTooltipClick = () => {
     if (!selectionTooltip) return;
@@ -312,7 +416,7 @@ export function GistPanel({ gist, comments, onAddComment, githubToken, onShare, 
               </div>
               <div className={`file-content ${showPreview ? 'preview-mode' : ''}`}>
                 {showPreview ? (
-                  <MarkdownPreview content={file.content} />
+                  <MarkdownPreview content={file.content} highlightedRanges={highlightedRangesByFile[filename] || []} />
                 ) : (
                   <FileContent
                     filename={filename}

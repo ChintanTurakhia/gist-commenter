@@ -95,28 +95,40 @@ export function useSyncScroll({
 
     fileBlocks.forEach(fileBlock => {
       const filename = fileBlock.dataset.filename;
+
+      // Raw mode: check <tr data-line> elements
       const rows = fileBlock.querySelectorAll('tr[data-line]');
-
-      rows.forEach(row => {
-        const rowRect = row.getBoundingClientRect();
-
-        // Check if row is visible in viewport
-        if (rowRect.bottom >= containerRect.top && rowRect.top <= containerRect.bottom) {
-          const lineNum = parseInt(row.dataset.line, 10);
-
-          // Calculate visibility score (higher = more centered in viewport)
-          const rowCenter = rowRect.top + rowRect.height / 2;
-          const containerCenter = containerRect.top + containerRect.height / 2;
-          const distanceFromCenter = Math.abs(rowCenter - containerCenter);
-          const visibility = 1 - (distanceFromCenter / (containerRect.height / 2));
-
-          visibleLines.push({
-            filename,
-            line: lineNum,
-            visibility: Math.max(0, visibility)
-          });
-        }
-      });
+      if (rows.length > 0) {
+        rows.forEach(row => {
+          const rowRect = row.getBoundingClientRect();
+          if (rowRect.bottom >= containerRect.top && rowRect.top <= containerRect.bottom) {
+            const lineNum = parseInt(row.dataset.line, 10);
+            const rowCenter = rowRect.top + rowRect.height / 2;
+            const containerCenter = containerRect.top + containerRect.height / 2;
+            const distanceFromCenter = Math.abs(rowCenter - containerCenter);
+            const visibility = 1 - (distanceFromCenter / (containerRect.height / 2));
+            visibleLines.push({ filename, line: lineNum, visibility: Math.max(0, visibility) });
+          }
+        });
+      } else {
+        // Preview mode: check <mark data-line-start> elements
+        const marks = fileBlock.querySelectorAll('mark[data-line-start]');
+        marks.forEach(mark => {
+          const markRect = mark.getBoundingClientRect();
+          if (markRect.bottom >= containerRect.top && markRect.top <= containerRect.bottom) {
+            const lineStart = parseInt(mark.dataset.lineStart, 10);
+            const lineEnd = parseInt(mark.dataset.lineEnd || lineStart, 10);
+            const markCenter = markRect.top + markRect.height / 2;
+            const containerCenter = containerRect.top + containerRect.height / 2;
+            const distanceFromCenter = Math.abs(markCenter - containerCenter);
+            const visibility = 1 - (distanceFromCenter / (containerRect.height / 2));
+            // Emit entries for each line in the range so findRelevantComments matches
+            for (let line = lineStart; line <= lineEnd; line++) {
+              visibleLines.push({ filename, line, visibility: Math.max(0, visibility) });
+            }
+          }
+        });
+      }
     });
 
     return visibleLines;
@@ -169,33 +181,72 @@ export function useSyncScroll({
   const scrollGistToLine = useCallback((filename, lineStart) => {
     acquireScrollLock('manual');
 
-    // Find the scrollable container
     const container = gistFilesRef.current || document.querySelector('.gist-files');
     if (!container) return;
 
-    // Find the line element
-    const lineEl = document.querySelector(
-      `[data-filename="${filename}"] [data-line="${lineStart}"]`
-    );
+    const fileBlock = container.querySelector(`[data-filename="${filename}"]`);
+    if (!fileBlock) return;
 
-    if (lineEl) {
-      const lineRect = lineEl.getBoundingClientRect();
+    // Raw mode: find the <tr data-line> element directly
+    let targetEl = fileBlock.querySelector(`[data-line="${lineStart}"]`);
+
+    // Preview mode fallback
+    if (!targetEl) {
+      // 1. Try <mark data-line-start> elements
+      const marks = fileBlock.querySelectorAll('mark[data-line-start]');
+      for (const mark of marks) {
+        const markStart = parseInt(mark.dataset.lineStart, 10);
+        const markEnd = parseInt(mark.dataset.lineEnd, 10);
+        if (lineStart >= markStart && lineStart <= markEnd) {
+          targetEl = mark;
+          break;
+        }
+      }
+
+      // 2. Try any <mark> with highlighted-text class
+      if (!targetEl) {
+        const allMarks = fileBlock.querySelectorAll('mark.highlighted-text');
+        if (allMarks.length > 0) {
+          targetEl = allMarks[0]; // scroll to first highlight in file
+        }
+      }
+
+      // 3. Final fallback: proportional scroll based on line position
+      if (!targetEl) {
+        const preview = fileBlock.querySelector('.markdown-preview');
+        if (preview) {
+          const fileContent = fileBlock.querySelector('.file-content');
+          const totalHeight = fileContent ? fileContent.scrollHeight : preview.scrollHeight;
+          // Estimate line count from the content
+          const textContent = preview.textContent || '';
+          const approxLines = textContent.split('\n').length || 1;
+          const ratio = Math.min(1, (lineStart - 1) / approxLines);
+          const targetTop = fileBlock.offsetTop + (totalHeight * ratio);
+          container.scrollTo({
+            top: Math.max(0, targetTop - container.clientHeight / 2),
+            behavior: 'smooth'
+          });
+          return;
+        }
+      }
+    }
+
+    if (targetEl) {
+      const elRect = targetEl.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
 
-      // Calculate scroll position to center the line in the container
       const targetScrollTop = container.scrollTop +
-        (lineRect.top - containerRect.top) -
+        (elRect.top - containerRect.top) -
         (containerRect.height / 2) +
-        (lineRect.height / 2);
+        (elRect.height / 2);
 
       container.scrollTo({
         top: Math.max(0, targetScrollTop),
         behavior: 'smooth'
       });
 
-      // Flash highlight the line
-      lineEl.classList.add('flash-highlight');
-      setTimeout(() => lineEl.classList.remove('flash-highlight'), 1500);
+      targetEl.classList.add('flash-highlight');
+      setTimeout(() => targetEl.classList.remove('flash-highlight'), 1500);
     }
   }, [acquireScrollLock]);
 
